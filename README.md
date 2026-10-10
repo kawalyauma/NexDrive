@@ -24,6 +24,7 @@ cd NexDrive
 cp .env.example .env
 # Edit .env: set POSTGRES_PASSWORD, SESSION_SECRET, DOMAIN and PUBLIC_ORIGIN.
 # Use a cryptographically random secret, e.g. openssl rand -hex 32
+bash scripts/preflight.sh
 docker compose -f docker-compose.yml -f compose.proxy.yml up -d --build
 docker compose -f docker-compose.yml -f compose.proxy.yml logs -f app
 ```
@@ -58,7 +59,7 @@ curl -X POST -H "Authorization: Bearer nd_WRITE_KEY" \
  "https://drive.example.org/api/workspaces/WORKSPACE_UUID/upload"
 ```
 
-See [API reference](docs/API.md), [operations & backup guide](docs/OPERATIONS.md), and [roadmap](docs/ROADMAP.md).
+See [API reference](docs/API.md), [operations & backup guide](docs/OPERATIONS.md), [production release gates](docs/PRODUCTION_GATES.md), and [roadmap](docs/ROADMAP.md).
 
 ## Operational security / backups
 
@@ -71,4 +72,4 @@ See [API reference](docs/API.md), [operations & backup guide](docs/OPERATIONS.md
 - API keys are powerful credentials; scope them to the intended workspace and revoke promptly when lost. **A key can access the entire workspace**, not merely one folder. Create separate workspaces for apps that must not see each other's files.
 - Only put the application behind a trusted reverse proxy. HTTP port 8080 stays bound to localhost; the API trusts exactly one proxy hop for client IP rate limiting.
 
-This is an initial foundation, **not yet a complete Google Drive clone**. Chunked/resumable transfers, malware scanning, content search, granular per-file ACLs, comprehensive auditing, SSO and desktop synchronization are planned but not included. Avoid storing highly sensitive regulated files until threat modeling, review and restore testing are complete.
+This is an initial foundation, **not yet a complete Google Drive clone or a verified production release**. GitHub Actions has not executed test steps successfully; see [the CI issue](https://github.com/kawalyauma/NexDrive/issues/1). Chunked/resumable transfers, malware scanning, content search, granular per-file ACLs, comprehensive auditing, SSO and desktop synchronization are planned but not included. Avoid storing highly sensitive regulated files until threat modeling, review and restore testing are complete.

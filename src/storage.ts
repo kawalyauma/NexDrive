@@ -13,7 +13,7 @@ export function blobPath(key:string):string {
  return join(root,key);
 }
 export async function saveUpload(file:MultipartFile,wid:string):Promise<{blobKey:string;size:number}>{
- const blobKey=wid+'/'+randomUUID(),target=blobPath(blobKey),temp=target+'.part';
+ const blobKey=wid.toLowerCase()+'/'+randomUUID(),target=blobPath(blobKey),temp=target+'.part';
  await mkdir(dirname(target),{recursive:true,mode:0o700});
  let size=0;
  try {
@@ -25,7 +25,7 @@ export async function saveUpload(file:MultipartFile,wid:string):Promise<{blobKey
  } catch(err){await rm(temp,{force:true}).catch(()=>{});throw err;}
 }
 export async function cloneBlob(original:string,wid:string):Promise<string>{
- const newKey=wid+'/'+randomUUID();
+ const newKey=wid.toLowerCase()+'/'+randomUUID();
  const target=blobPath(newKey);
  await mkdir(dirname(target),{recursive:true,mode:0o700});
  await copyFile(blobPath(original),target,constants.COPYFILE_EXCL);

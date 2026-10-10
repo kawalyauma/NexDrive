@@ -4,7 +4,8 @@ import {access,bad,resolvePrincipal} from '../auth.js';
 import type {FastifyRequest} from 'fastify';
 export const uuid=z.string().uuid();
 export async function scope(req:FastifyRequest,needed:'read'|'write'|'admin'='read'){
- const {wid}=z.object({wid:uuid}).parse(req.params);
+ const parsed=z.object({wid:uuid}).parse(req.params);
+ const wid=parsed.wid.toLowerCase();
  const principal=await resolvePrincipal(req);
  const role=await access(principal,wid,needed);
  return {wid,principal,role};
