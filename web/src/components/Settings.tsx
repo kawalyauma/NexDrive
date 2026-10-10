@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useState} from 'react';
-import {KeyRound,Users,Plus,Copy,Trash2,ShieldCheck,Info,Check,UserPlus} from 'lucide-react';
+import {KeyRound,Users,Plus,Copy,Trash2,ShieldCheck,Info,Check,UserPlus,Github} from 'lucide-react';
 import {api,type Workspace} from '../api';
 import AccountSecurity from './AccountSecurity';
 type Member={id:string;name:string;email:string;role:string};
@@ -11,17 +11,19 @@ export default function Settings({workspace}: {workspace:Workspace}){
  const [email,setEmail]=useState(''),[role,setRole]=useState<'member'|'admin'>('member');
  const [keyName,setKeyName]=useState(''),[permission,setPermission]=useState<'read'|'write'>('read');
  const [secret,setSecret]=useState(''),[inviteUrl,setInviteUrl]=useState('');
+ const [freshMode,setFreshMode]=useState<'licensed_downloads'|'all_index'>('licensed_downloads');
  const [message,setMessage]=useState(''),[error,setError]=useState('');
  const isAdmin=workspace.role!=='member';
  const base='/workspaces/'+workspace.id;
  const load=useCallback(async()=>{
   if(!isAdmin)return;
   try{
-   const [m,k,events]=await Promise.all([
+   const [m,k,events,fresh]=await Promise.all([
     api<{members:Member[]}>(base+'/members'),
     api<{keys:ServiceKey[]}>(base+'/api-keys'),
-    api<{events:Activity[]}>(base+'/activity')]);
-   setMembers(m.members);setKeys(k.keys);setActivity(events.events);
+    api<{events:Activity[]}>(base+'/activity'),
+    api<{mode:'licensed_downloads'|'all_index'}>(base+'/plugins/fresh-teacher/settings')]);
+   setMembers(m.members);setKeys(k.keys);setActivity(events.events);setFreshMode(fresh.mode);
   }catch(e){setError((e as Error).message);}
  },[base,isAdmin]);
  useEffect(()=>{void load();},[load]);
@@ -59,6 +61,11 @@ export default function Settings({workspace}: {workspace:Workspace}){
   try{await navigator.clipboard.writeText(value);setMessage('Copied to clipboard.');}
   catch{window.prompt('Copy this value',value);}
  }
+ async function saveFreshMode(e:React.FormEvent){
+  e.preventDefault();setError('');
+  try{await api(base+'/plugins/fresh-teacher/settings',{method:'PATCH',json:{mode:freshMode}});setMessage('Fresh Teacher download policy saved. The plugin is restarting.');}
+  catch(err){setError((err as Error).message);}
+ }
  return <div className="settings-screen">
   <div className="topline"><div><span className="eyebrow">WORKSPACE SETTINGS</span><h1>People & integrations</h1>
    <p className="muted">Manage who can access your space and how other apps connect.</p></div></div>
@@ -81,6 +88,18 @@ export default function Settings({workspace}: {workspace:Workspace}){
    </div>
   </div>
   {isAdmin&&<div className="setting-grid">
+   <section className="settings-panel setting-card">
+    <div className="card-heading"><Github size={21}/><h3>Fresh Teacher downloads</h3></div>
+    <p className="muted">Choose whether NexDrive downloads reusable files or only catalogs repository links.</p>
+    <form onSubmit={saveFreshMode}>
+     <label>Repository policy<select value={freshMode} onChange={e=>setFreshMode(e.target.value as 'licensed_downloads'|'all_index')}>
+      <option value="licensed_downloads">Licensed repositories — download files</option>
+      <option value="all_index">All repositories — index links only</option>
+     </select></label>
+     <p className="muted">Files without a recognised redistribution licence are never copied or posted to EduShare.</p>
+     <button className="primary" type="submit"><Check size={17}/> Save download policy</button>
+    </form>
+   </section>
    <section className="settings-panel setting-card">
     <div className="card-heading"><UserPlus size={21}/><h3>Invite a teammate</h3></div>
     <p className="muted">Create a private invitation that expires in 7 days.</p>

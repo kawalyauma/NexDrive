@@ -7,12 +7,14 @@ import {pool,transaction} from '../db.js';
 import {bad,newId} from '../auth.js';
 import {blobPath,maxUploadBytes,safeFileName} from '../storage.js';
 import {scope} from './util.js';
+import {z} from 'zod';
 
 type Event={event:string;repo?:string;branch?:string;license?:string;commit?:string;path?:string;
  blob_sha?:string;name?:string;size?:number;done?:number;sha256?:string;mime_type?:string;
  local_path?:string;error?:string;seconds?:number};
 let watcher:ChildProcessWithoutNullStreams|null=null;
 let restartTimer:NodeJS.Timeout|null=null;
+let restartDelay=60000;
 
 function title(name:string){return name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim().slice(0,200)||'Fresh Teacher resource';}
 function mime(name:string){return ({'.pdf':'application/pdf','.doc':'application/msword','.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document','.ppt':'application/vnd.ms-powerpoint','.pptx':'application/vnd.openxmlformats-officedocument.presentationml.presentation','.xls':'application/vnd.ms-excel','.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','.txt':'text/plain'} as Record<string,string>)[extname(name).toLowerCase()]||'application/octet-stream';}
@@ -59,14 +61,19 @@ async function post(nodeId:string,event:Event){
 
 async function runWatcher(wid:string){
  const output=(process.env.STORAGE_DIR||'/data')+'/.fresh-teacher';await mkdir(output,{recursive:true,mode:0o700});
- const child=spawn('python3',['/app/plugins/fresh_teacher_worker.py','--repos',process.env.FRESH_TEACHER_REPOS||'primary:main:MIT,secondary:main:MIT','--output',output,'--max-bytes',String(maxUploadBytes),'--poll-seconds',process.env.FRESH_TEACHER_POLL_SECONDS||'900'],{stdio:['pipe','pipe','pipe']});watcher=child;
+ const setting=(await pool.query("INSERT INTO fresh_teacher_settings(workspace_id) VALUES($1) ON CONFLICT DO NOTHING RETURNING mode",[wid])).rows[0]
+  ??(await pool.query('SELECT mode FROM fresh_teacher_settings WHERE workspace_id=$1',[wid])).rows[0];
+ const mode=setting?.mode==='all_index'?'all_index':'licensed_downloads';
+ const child=spawn('python3',['/app/plugins/fresh_teacher_worker.py','--repos',process.env.FRESH_TEACHER_REPOS||'primary:main:MIT,secondary:main:MIT','--output',output,'--max-bytes',String(maxUploadBytes),'--poll-seconds',process.env.FRESH_TEACHER_POLL_SECONDS||'900','--mode',mode],{stdio:['pipe','pipe','pipe']});watcher=child;
  let current:string|null=null;
  const lines=createInterface({input:child.stdout});
  try{for await(const line of lines){
-  const event=JSON.parse(line) as Event;if(!event.repo&&event.event!=='idle')continue;
+  const event=JSON.parse(line) as Event;if(!event.repo&&!['idle','catalog_error'].includes(event.event))continue;
   if(event.event==='repo'){
    const row=(await pool.query("INSERT INTO fresh_teacher_sources(workspace_id,repo,branch,license,status,started_at) VALUES($1,$2,$3,$4,'scanning',now()) ON CONFLICT(workspace_id,repo) DO UPDATE SET branch=$3,license=$4,status='scanning',error=NULL,updated_at=now() RETURNING last_commit",[wid,event.repo,event.branch,event.license])).rows[0];
    child.stdin.write(row.last_commit===event.commit?'unchanged\n':'scan\n');
+  }else if(event.event==='catalog_repo'){
+   await pool.query("INSERT INTO fresh_teacher_sources(workspace_id,repo,branch,license,status,updated_at) VALUES($1,$2,$3,$4,'indexed',now()) ON CONFLICT(workspace_id,repo) DO UPDATE SET branch=$3,license=$4,status=CASE WHEN fresh_teacher_sources.status IN ('scanning','watching') THEN fresh_teacher_sources.status ELSE 'indexed' END,error=NULL,updated_at=now()",[wid,event.repo,event.branch,event.license]);
   }else if(event.event==='candidate'){
    await pool.query('UPDATE fresh_teacher_sources SET scanned=scanned+1,current_file=$3,updated_at=now() WHERE workspace_id=$1 AND repo=$2',[wid,event.repo,event.path]);
    let item=(await pool.query("INSERT INTO fresh_teacher_items(id,workspace_id,repo,path,blob_sha,commit_sha,license,file_name,size_bytes,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'downloading') ON CONFLICT(workspace_id,repo,path,blob_sha) DO NOTHING RETURNING id",[newId(),wid,event.repo,event.path,event.blob_sha,event.commit,event.license,event.name,event.size])).rows[0];
@@ -90,13 +97,17 @@ async function runWatcher(wid:string){
    current=null;child.stdin.write('continue\n');
   }else if(event.event==='repo_complete')await pool.query("UPDATE fresh_teacher_sources SET last_commit=$3,status='watching',current_file=NULL,error=NULL,updated_at=now() WHERE workspace_id=$1 AND repo=$2",[wid,event.repo,event.commit]);
   else if(event.event==='repo_error')await pool.query("UPDATE fresh_teacher_sources SET status='failed',failed=failed+1,error=$3,updated_at=now() WHERE workspace_id=$1 AND repo=$2",[wid,event.repo,event.error]);
-  else if(event.event==='idle')await pool.query("UPDATE fresh_teacher_sources SET status='watching',current_file=NULL,updated_at=now() WHERE workspace_id=$1 AND status<>'failed'",[wid]);
+  else if(event.event==='catalog_error')await pool.query("UPDATE fresh_teacher_sources SET error=$2,updated_at=now() WHERE workspace_id=$1 AND status='indexed'",[wid,event.error]);
+  else if(event.event==='idle'&&mode==='licensed_downloads')await pool.query("UPDATE fresh_teacher_sources SET status='watching',current_file=NULL,updated_at=now() WHERE workspace_id=$1 AND status<>'failed' AND status<>'indexed'",[wid]);
  }}finally{if(child.exitCode===null)child.kill('SIGTERM');watcher=null;await rm(output,{recursive:true,force:true}).catch(()=>{});}
 }
 
-function supervise(wid:string){if(watcher)return;void runWatcher(wid).catch(async error=>{await pool.query("UPDATE fresh_teacher_sources SET status='failed',error=$2,updated_at=now() WHERE workspace_id=$1",[wid,(error as Error).message.slice(0,500)]).catch(()=>{});}).finally(()=>{restartTimer=setTimeout(()=>supervise(wid),60000);});}
+function supervise(wid:string){if(watcher)return;void runWatcher(wid).catch(async error=>{await pool.query("UPDATE fresh_teacher_sources SET status='failed',error=$2,updated_at=now() WHERE workspace_id=$1",[wid,(error as Error).message.slice(0,500)]).catch(()=>{});}).finally(()=>{const delay=restartDelay;restartDelay=60000;restartTimer=setTimeout(()=>supervise(wid),delay);});}
+function restart(wid:string){restartDelay=1000;if(restartTimer){clearTimeout(restartTimer);restartTimer=null;}if(watcher)watcher.kill('SIGTERM');else setTimeout(()=>supervise(wid),1000);}
 
 export const freshTeacherRoutes:FastifyPluginAsync=async app=>{
- app.get('/workspaces/:wid/plugins/fresh-teacher/analytics',async req=>{const {wid}=await scope(req);const sources=await pool.query('SELECT * FROM fresh_teacher_sources WHERE workspace_id=$1 ORDER BY repo',[wid]);const recent=await pool.query('SELECT * FROM fresh_teacher_items WHERE workspace_id=$1 ORDER BY updated_at DESC LIMIT 100',[wid]);return {sources:sources.rows,recent:recent.rows};});
+ app.get('/workspaces/:wid/plugins/fresh-teacher/analytics',async req=>{const {wid}=await scope(req);const setting=(await pool.query("SELECT coalesce((SELECT mode FROM fresh_teacher_settings WHERE workspace_id=$1),'licensed_downloads') AS mode",[wid])).rows[0];const sources=await pool.query(`SELECT * FROM fresh_teacher_sources WHERE workspace_id=$1 AND ($2='all_index' OR status<>'indexed') ORDER BY repo`,[wid,setting.mode]);const recent=await pool.query('SELECT * FROM fresh_teacher_items WHERE workspace_id=$1 ORDER BY updated_at DESC LIMIT 100',[wid]);return {mode:setting.mode,sources:sources.rows,recent:recent.rows};});
+ app.get('/workspaces/:wid/plugins/fresh-teacher/settings',async req=>{const {wid}=await scope(req);const row=(await pool.query("SELECT coalesce((SELECT mode FROM fresh_teacher_settings WHERE workspace_id=$1),'licensed_downloads') AS mode",[wid])).rows[0];return row;});
+ app.patch('/workspaces/:wid/plugins/fresh-teacher/settings',async req=>{const {wid}=await scope(req,'admin');const body=z.object({mode:z.enum(['licensed_downloads','all_index'])}).parse(req.body);await pool.query('INSERT INTO fresh_teacher_settings(workspace_id,mode) VALUES($1,$2) ON CONFLICT(workspace_id) DO UPDATE SET mode=$2,updated_at=now()',[wid,body.mode]);restart(wid);return {mode:body.mode};});
  const wid=process.env.FRESH_TEACHER_WORKSPACE_ID;if(wid){if(restartTimer)clearTimeout(restartTimer);setTimeout(()=>supervise(wid),5000);}
 };

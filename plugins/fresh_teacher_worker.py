@@ -90,6 +90,22 @@ async def scan_repo(args, repo, branch, license_name):
     emit('repo_complete', repo=repo, commit=commit)
 
 
+def public_repositories():
+    page = 1
+    while True:
+        url = f'https://api.github.com/users/Fresh-Teacher/repos?per_page=100&page={page}'
+        request = urllib.request.Request(url, headers={'User-Agent': 'Notesug-NexDrive/1.0', 'Accept': 'application/vnd.github+json'})
+        with urllib.request.urlopen(request, timeout=120) as response:
+            repos = json.load(response)
+        for repo in repos:
+            license_info = repo.get('license') or {}
+            emit('catalog_repo', repo=repo['name'], branch=repo.get('default_branch') or 'main',
+                 license=license_info.get('spdx_id') or 'NONE', source_url=repo.get('html_url'))
+        if len(repos) < 100:
+            return
+        page += 1
+
+
 async def run(args):
     repos = []
     for value in args.repos.split(','):
@@ -100,6 +116,14 @@ async def run(args):
         raise RuntimeError('No Fresh Teacher repositories configured')
     Path(args.output).mkdir(parents=True, exist_ok=True)
     while True:
+        if args.mode == 'all_index':
+            try:
+                await asyncio.to_thread(public_repositories)
+            except Exception as error:
+                emit('catalog_error', error=str(error)[:1000])
+            emit('idle', seconds=args.poll_seconds)
+            await asyncio.sleep(args.poll_seconds)
+            continue
         for repo, branch, license_name in repos:
             try:
                 await scan_repo(args, repo, branch, license_name)
@@ -115,4 +139,5 @@ if __name__ == '__main__':
     parser.add_argument('--output', required=True)
     parser.add_argument('--max-bytes', type=int, required=True)
     parser.add_argument('--poll-seconds', type=int, default=900)
+    parser.add_argument('--mode', choices=('licensed_downloads', 'all_index'), default='licensed_downloads')
     asyncio.run(run(parser.parse_args()))
