@@ -85,10 +85,10 @@ async function runJob(jobId:string,wid:string,userId:string|null){
  for(const key of required)if(!process.env[key])throw new Error(`${key} is not configured`);
  const output=join(process.env.STORAGE_DIR||'/data','.telegram',jobId);
  await mkdir(output,{recursive:true,mode:0o700});
- const cursor=(await pool.query(`SELECT coalesce(
-   (SELECT greatest(min(message_id)-1,0) FROM telegram_items WHERE workspace_id=$1 AND status IN ('failed','downloading')),
+ const cursor=(await pool.query(`SELECT greatest(coalesce(
+   (SELECT min(message_id)-1 FROM telegram_items WHERE workspace_id=$1 AND status IN ('failed','downloading')),
    (SELECT max(message_id) FROM telegram_items WHERE workspace_id=$1 AND status IN ('posted','skipped','stored')),
-   0) AS min_id`,[wid])).rows[0].min_id;
+   0),0) AS min_id`,[wid])).rows[0].min_id;
  const child=spawn('python3',['/app/plugins/telegram_worker.py','--api-id',process.env.TELEGRAM_API_ID!,
   '--api-hash',process.env.TELEGRAM_API_HASH!,'--session',process.env.TELEGRAM_SESSION!,
   '--group',process.env.TELEGRAM_GROUP!,'--output',output,'--max-bytes',String(maxUploadBytes),'--min-id',String(cursor)],
