@@ -58,6 +58,42 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+  # Always-on Telegram importer: checks the group every TELEGRAM_POLL_SECONDS and imports new files.
+  # Runs apart from the web app so web restarts never cut an import; the web page only shows its progress.
+  telegram:
+    image: nexdrive-app
+    command: ["node","dist/telegram-service.js"]
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-nexdrive}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-nexdrive}
+      SESSION_SECRET: ${SESSION_SECRET}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-268435456}
+      STORAGE_DIR: /data
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
+      TELEGRAM_GROUP: ${TELEGRAM_GROUP:-}
+      TELEGRAM_SESSION: /telegram/notesug
+      TELEGRAM_POLL_SECONDS: ${TELEGRAM_POLL_SECONDS:-60}
+      TELEGRAM_WORKSPACE_ID: ${TELEGRAM_WORKSPACE_ID:-}
+      EDUSHARE_URL: ${EDUSHARE_URL:-}
+      EDUSHARE_INTEGRATION_KEY: ${EDUSHARE_INTEGRATION_KEY:-}
+    volumes:
+      - ${STORAGE_HOST_PATH:-nexdrive_data}:/data
+      - ${TELEGRAM_SESSION_HOST_PATH:-./data/telegram-session}:/telegram
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
 volumes:
   postgres_data:
   nexdrive_data:

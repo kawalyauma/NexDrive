@@ -83,3 +83,12 @@ CREATE TABLE IF NOT EXISTS telegram_items (
  UNIQUE(workspace_id,group_ref,message_id)
 );
 CREATE INDEX IF NOT EXISTS telegram_items_job_idx ON telegram_items(job_id,created_at DESC);
+
+-- The always-on Telegram importer (telegram-service container). The web app toggles `enabled` and shows the state.
+CREATE TABLE IF NOT EXISTS telegram_service (
+ workspace_id uuid PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+ enabled boolean NOT NULL DEFAULT true, run_now boolean NOT NULL DEFAULT false,
+ state text NOT NULL DEFAULT 'starting', message text, current_job uuid,
+ heartbeat_at timestamptz, last_pass_at timestamptz, next_pass_at timestamptz,
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
