@@ -32,7 +32,9 @@ export async function cloneBlob(original:string,wid:string):Promise<string>{
  return newKey;
 }
 export async function removeBlob(key:string):Promise<void>{await rm(blobPath(key),{force:true});}
-export function streamBlob(key:string){return createReadStream(blobPath(key));}
+export function streamBlob(key:string,range?:{start:number;end:number}){
+ return createReadStream(blobPath(key),range?{start:range.start,end:range.end}:undefined);
+}
 export function safeFileName(name:string):string{
  const x=name.trim().normalize('NFC');
  if(!x||x.length>255||x.includes('/')||x.includes(String.fromCharCode(92))||x==='.'||x==='..'||Array.from(x).some(ch=>ch.charCodeAt(0)<32||ch.charCodeAt(0)===127))throw bad('Invalid name');

@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS nodes (
  kind text NOT NULL CHECK(kind IN ('folder','file')),
  name text NOT NULL CHECK(length(name) BETWEEN 1 AND 255),
  blob_key text, size_bytes bigint NOT NULL DEFAULT 0 CHECK(size_bytes >= 0),
- mime_type text, deleted_at timestamptz,
+ mime_type text, sha256 text, deleted_at timestamptz,
  created_at timestamptz NOT NULL DEFAULT now(),
  updated_at timestamptz NOT NULL DEFAULT now(),
  CHECK ((kind='folder' AND blob_key IS NULL) OR (kind='file' AND blob_key IS NOT NULL))
@@ -34,6 +34,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS nodes_root_unique ON nodes(workspace_id,name)
 CREATE UNIQUE INDEX IF NOT EXISTS nodes_child_unique ON nodes(workspace_id,parent_id,name)
  WHERE parent_id IS NOT NULL AND deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS nodes_blob_unique ON nodes(blob_key) WHERE blob_key IS NOT NULL;
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS sha256 text;
+CREATE INDEX IF NOT EXISTS nodes_sha256_idx ON nodes(workspace_id,sha256) WHERE sha256 IS NOT NULL;
 CREATE TABLE IF NOT EXISTS api_keys (
  id uuid PRIMARY KEY, workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
  name text NOT NULL, key_hash text NOT NULL UNIQUE,
@@ -56,3 +58,28 @@ CREATE TABLE IF NOT EXISTS shares (
  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
  revoked_at timestamptz, created_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS telegram_jobs (
+ id uuid PRIMARY KEY, workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+ group_ref text NOT NULL, status text NOT NULL CHECK(status IN ('queued','running','paused','done','failed')),
+ discovered integer NOT NULL DEFAULT 0, downloaded integer NOT NULL DEFAULT 0,
+ posted integer NOT NULL DEFAULT 0, skipped integer NOT NULL DEFAULT 0, failed integer NOT NULL DEFAULT 0,
+ bytes_downloaded bigint NOT NULL DEFAULT 0, current_file text, current_bytes bigint NOT NULL DEFAULT 0,
+ current_total bigint NOT NULL DEFAULT 0, error text,
+ created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+ created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+ finished_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS telegram_jobs_workspace_idx ON telegram_jobs(workspace_id,created_at DESC);
+
+CREATE TABLE IF NOT EXISTS telegram_items (
+ id uuid PRIMARY KEY, job_id uuid NOT NULL REFERENCES telegram_jobs(id) ON DELETE CASCADE,
+ workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+ group_ref text NOT NULL, message_id bigint NOT NULL, node_id uuid REFERENCES nodes(id) ON DELETE SET NULL,
+ file_name text NOT NULL, size_bytes bigint NOT NULL DEFAULT 0, sha256 text,
+ status text NOT NULL CHECK(status IN ('downloading','stored','posted','skipped','failed')),
+ edushare_resource_id text, edushare_slug text, error text,
+ created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(workspace_id,group_ref,message_id)
+);
+CREATE INDEX IF NOT EXISTS telegram_items_job_idx ON telegram_items(job_id,created_at DESC);

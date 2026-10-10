@@ -17,11 +17,16 @@ FROM node:22-bookworm-slim
 ENV NODE_ENV=production PORT=8080 STORAGE_DIR=/data
 WORKDIR /app
 COPY package*.json ./
-RUN npm install --omit=dev --no-audit --no-fund && groupadd -r nexdrive && useradd -r -g nexdrive nexdrive
+RUN npm install --omit=dev --no-audit --no-fund \
+ && apt-get update && apt-get install -y --no-install-recommends python3 python3-pip \
+ && pip3 install --break-system-packages --no-cache-dir telethon==1.42.0 \
+ && rm -rf /var/lib/apt/lists/* \
+ && groupadd -r nexdrive && useradd -r -g nexdrive nexdrive
 COPY --from=apibuild /build/dist ./dist
 COPY --from=webbuild /build/web/dist ./web/dist
 COPY db/ ./db/
-RUN mkdir -p /data && chown -R nexdrive:nexdrive /app /data
+COPY plugins/ ./plugins/
+RUN mkdir -p /data && chown nexdrive:nexdrive /data
 USER nexdrive
 EXPOSE 8080
 CMD ["node","dist/server.js"]

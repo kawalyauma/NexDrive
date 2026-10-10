@@ -28,6 +28,14 @@ export const nodeRoutes:FastifyPluginAsync=async app=>{
    [wid,input.parentId||null]);
   return {nodes:r.rows};
  });
+ app.get('/workspaces/:wid/nodes/:id',async req=>{
+  const {wid}=await scope(req);
+  const {id}=z.object({id:uuid}).parse(req.params);
+  const item=await node(wid,id);
+  return {id:item.id,parent_id:item.parent_id,kind:item.kind,name:item.name,
+   size_bytes:item.size_bytes,mime_type:item.mime_type,sha256:item.sha256,
+   created_at:item.created_at,updated_at:item.updated_at};
+ });
  app.post('/workspaces/:wid/folders',async(req,reply)=>{
   const {wid,principal}=await scope(req,'write');
   const form=z.object({name:z.string(),parentId:uuid.nullish()}).parse(req.body);

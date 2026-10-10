@@ -1,0 +1,7 @@
+tunnel: f5daecc0-25ff-4e4b-a68b-9f45a3c5bb88
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: nexdrive.notesug.com
+    service: http://127.0.0.1:8090
+  - service: http_status:404

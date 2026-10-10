@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify,{type FastifyError} from 'fastify';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
@@ -15,18 +15,22 @@ import {managementRoutes} from './routes/management-routes.js';
 import {fileActionsRoutes} from './routes/file-actions-routes.js';
 import {explorerRoutes} from './routes/explorer-routes.js';
 import {versionRoutes} from './routes/version-routes.js';
+import {telegramRoutes} from './routes/telegram-routes.js';
 
 async function start(){
  validateConfiguration();
+ const storageMarker=process.env.STORAGE_MARKER_FILE;
+ if(storageMarker&&!existsSync(storageMarker))
+  throw new Error(`Storage marker is missing: ${storageMarker}`);
  if(!Number.isSafeInteger(maxUploadBytes)||maxUploadBytes<1)throw new Error('Invalid MAX_UPLOAD_BYTES');
  await initDatabase();
  const app=Fastify({logger:{redact:['req.headers.authorization','req.headers.cookie','res.headers.set-cookie']},
-  disableRequestLogging:true,bodyLimit:1024*1024,trustProxy:1});
+  disableRequestLogging:true,bodyLimit:1024*1024,trustProxy:'127.0.0.1'});
  await app.register(cookie);
  await app.register(rateLimit,{max:180,timeWindow:'1 minute'});
  await app.register(multipart,{limits:{fileSize:maxUploadBytes,files:1,fields:3},throwFileSizeLimit:false});
  app.addHook('onRequest',async req=>requireSameOrigin(req));
- app.setErrorHandler((err,req,reply)=>{
+ app.setErrorHandler((err:FastifyError,req,reply)=>{
   const code=(err as Error&{code?:string;statusCode?:number}).code;
   const status=err instanceof ZodError?400:code==='23505'?409:code==='23503'?400:
    typeof err.statusCode==='number'?Math.max(400,Math.min(599,err.statusCode)):500;
@@ -44,6 +48,7 @@ async function start(){
  await app.register(fileActionsRoutes,{prefix:'/api'});
  await app.register(explorerRoutes,{prefix:'/api'});
  await app.register(versionRoutes,{prefix:'/api'});
+ await app.register(telegramRoutes,{prefix:'/api'});
  const webDir=resolve(process.cwd(),'web/dist');
  if(existsSync(resolve(webDir,'index.html'))){
   await app.register(staticFiles,{root:webDir,prefix:'/',wildcard:false});
