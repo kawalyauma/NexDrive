@@ -18,7 +18,7 @@ ENV NODE_ENV=production PORT=8080 STORAGE_DIR=/data
 WORKDIR /app
 COPY package*.json ./
 RUN npm install --omit=dev --no-audit --no-fund \
- && apt-get update && apt-get install -y --no-install-recommends python3 python3-pip \
+ && apt-get update && apt-get install -y --no-install-recommends python3 python3-pip git ca-certificates \
  && pip3 install --break-system-packages --no-cache-dir telethon==1.42.0 \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd -r nexdrive && useradd -r -g nexdrive nexdrive

@@ -16,6 +16,7 @@ import {fileActionsRoutes} from './routes/file-actions-routes.js';
 import {explorerRoutes} from './routes/explorer-routes.js';
 import {versionRoutes} from './routes/version-routes.js';
 import {telegramRoutes} from './routes/telegram-routes.js';
+import {freshTeacherRoutes} from './routes/fresh-teacher-routes.js';
 
 async function start(){
  validateConfiguration();
@@ -49,6 +50,7 @@ async function start(){
  await app.register(explorerRoutes,{prefix:'/api'});
  await app.register(versionRoutes,{prefix:'/api'});
  await app.register(telegramRoutes,{prefix:'/api'});
+ await app.register(freshTeacherRoutes,{prefix:'/api'});
  const webDir=resolve(process.cwd(),'web/dist');
  if(existsSync(resolve(webDir,'index.html'))){
   await app.register(staticFiles,{root:webDir,prefix:'/',wildcard:false});

@@ -1,18 +1,19 @@
 import {useEffect,useState} from 'react';
-import {Cloud,Plus,LogOut,ChevronDown,Users,HardDrive,Settings as Gear,DownloadCloud} from 'lucide-react';
+import {Cloud,Plus,LogOut,ChevronDown,Users,HardDrive,Settings as Gear,DownloadCloud,Github} from 'lucide-react';
 import {api,type Profile} from './api';
 import Auth from './components/Auth';
 import Drive from './components/Drive';
 import Settings from './components/Settings';
 import TelegramImport from './components/TelegramImport';
+import FreshTeacherAnalytics from './components/FreshTeacherAnalytics';
 export default function App(){
  const [invite,setInvite]=useState<string|null>(()=>new URLSearchParams(window.location.search).get('invite'));
  const [profile,setProfile]=useState<Profile|null>(null);
  const [loading,setLoading]=useState(true),[error,setError]=useState('');
  const [workspaceId,setWorkspaceId]=useState('');
- const pageFromPath=(): 'drive'|'settings'|'telegram'=>window.location.pathname==='/telegram'?'telegram':window.location.pathname==='/settings'?'settings':'drive';
- const [page,setPage]=useState<'drive'|'settings'|'telegram'>(pageFromPath);
- function navigate(next:'drive'|'settings'|'telegram'){
+ const pageFromPath=(): 'drive'|'settings'|'telegram'|'fresh-teacher'=>window.location.pathname==='/telegram'?'telegram':window.location.pathname==='/fresh-teacher'?'fresh-teacher':window.location.pathname==='/settings'?'settings':'drive';
+ const [page,setPage]=useState<'drive'|'settings'|'telegram'|'fresh-teacher'>(pageFromPath);
+ function navigate(next:'drive'|'settings'|'telegram'|'fresh-teacher'){
   setPage(next);history.pushState({},'',next==='drive'?'/':`/${next}`);
  }
  async function refresh(){
@@ -53,6 +54,7 @@ export default function App(){
     <button className={page==='drive'?'active':''} onClick={()=>navigate('drive')}><HardDrive size={19}/> My files</button>
     <button className={page==='settings'?'active':''} onClick={()=>navigate('settings')}><Gear size={19}/> Settings & access</button>
     <button className={page==='telegram'?'active':''} onClick={()=>navigate('telegram')}><DownloadCloud size={19}/> Telegram import</button>
+    <button className={page==='fresh-teacher'?'active':''} onClick={()=>navigate('fresh-teacher')}><Github size={19}/> Fresh Teacher</button>
    </nav>
    <div className="sidebar-bottom">
     <button className="new-workspace" onClick={createWorkspace}><Plus size={17}/> New workspace</button>
@@ -65,11 +67,11 @@ export default function App(){
   <main className="content">
    <header className="mobile-header"><span className="logo-mark"><Cloud size={21}/></span><strong>NexDrive</strong>
     <select aria-label="Mobile workspace" value={workspaceId} onChange={e=>{setWorkspaceId(e.target.value);setPage("drive");}}>{profile.workspaces.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select>
-    <select aria-label="Mobile page" value={page} onChange={e=>navigate(e.target.value as 'drive'|'settings'|'telegram')}><option value="drive">Files</option><option value="telegram">Telegram import</option><option value="settings">Settings</option></select>
+    <select aria-label="Mobile page" value={page} onChange={e=>navigate(e.target.value as 'drive'|'settings'|'telegram'|'fresh-teacher')}><option value="drive">Files</option><option value="telegram">Telegram import</option><option value="fresh-teacher">Fresh Teacher</option><option value="settings">Settings</option></select>
     <button className="mobile-logout" title="Sign out" aria-label="Sign out" onClick={()=>void logout()}><LogOut size={19}/></button></header>
    {invite&&<div className="invite-banner"><Users size={18}/> You have a pending workspace invitation. <button onClick={()=>void acceptInvite()}>Accept invitation</button></div>}
    {error&&<div className="alert error" role="alert">{error}<button onClick={()=>setError('')}>×</button></div>}
-   {workspace?(page==='drive'?<Drive key={workspace.id} workspace={workspace}/>:page==='telegram'?<TelegramImport key={workspace.id} workspace={workspace}/>:<Settings key={workspace.id} workspace={workspace}/>):
+   {workspace?(page==='drive'?<Drive key={workspace.id} workspace={workspace}/>:page==='telegram'?<TelegramImport key={workspace.id} workspace={workspace}/>:page==='fresh-teacher'?<FreshTeacherAnalytics key={workspace.id} workspace={workspace}/>:<Settings key={workspace.id} workspace={workspace}/>):
     <div className="empty-state"><h2>No workspace yet</h2><p>Create a workspace or accept an invitation to begin.</p>
     <button className="primary" onClick={createWorkspace}><Plus size={18}/> Create workspace</button></div>}
   </main>

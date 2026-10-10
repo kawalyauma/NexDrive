@@ -82,6 +82,48 @@ CREATE TABLE IF NOT EXISTS telegram_items (
  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
  UNIQUE(workspace_id,group_ref,message_id)
 );
+
+CREATE TABLE IF NOT EXISTS fresh_teacher_sources (
+ workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+ repo text NOT NULL,
+ branch text NOT NULL DEFAULT 'main',
+ license text NOT NULL,
+ last_commit text,
+ status text NOT NULL DEFAULT 'queued',
+ scanned bigint NOT NULL DEFAULT 0,
+ downloaded bigint NOT NULL DEFAULT 0,
+ posted bigint NOT NULL DEFAULT 0,
+ skipped bigint NOT NULL DEFAULT 0,
+ failed bigint NOT NULL DEFAULT 0,
+ bytes_downloaded bigint NOT NULL DEFAULT 0,
+ current_file text,
+ error text,
+ started_at timestamptz,
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(workspace_id,repo)
+);
+
+CREATE TABLE IF NOT EXISTS fresh_teacher_items (
+ id uuid PRIMARY KEY,
+ workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+ repo text NOT NULL,
+ path text NOT NULL,
+ blob_sha text NOT NULL,
+ commit_sha text NOT NULL,
+ license text NOT NULL,
+ node_id uuid REFERENCES nodes(id) ON DELETE SET NULL,
+ file_name text NOT NULL,
+ size_bytes bigint NOT NULL DEFAULT 0,
+ sha256 text,
+ status text NOT NULL DEFAULT 'queued',
+ edushare_resource_id text,
+ edushare_slug text,
+ error text,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(workspace_id,repo,path,blob_sha)
+);
+CREATE INDEX IF NOT EXISTS fresh_teacher_items_recent_idx ON fresh_teacher_items(workspace_id,updated_at DESC);
 CREATE INDEX IF NOT EXISTS telegram_items_job_idx ON telegram_items(job_id,created_at DESC);
 
 -- The always-on Telegram importer (telegram-service container). The web app toggles `enabled` and shows the state.
