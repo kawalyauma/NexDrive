@@ -46,7 +46,7 @@ async def run(args):
     output.mkdir(parents=True, exist_ok=True)
     emit('connected', group=getattr(entity, 'title', args.group))
     try:
-        async for message in client.iter_messages(entity, reverse=True):
+        async for message in client.iter_messages(entity, reverse=True, min_id=args.min_id):
             name = filename(message)
             if not name or Path(name).suffix.lower() not in SUPPORTED:
                 continue
@@ -96,4 +96,5 @@ if __name__ == '__main__':
     parser.add_argument('--group', required=True)
     parser.add_argument('--output', required=True)
     parser.add_argument('--max-bytes', type=int, required=True)
+    parser.add_argument('--min-id', type=int, default=0)
     asyncio.run(run(parser.parse_args()))

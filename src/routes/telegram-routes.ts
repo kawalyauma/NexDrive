@@ -17,6 +17,22 @@ function titleFromName(name:string){
  return name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim().slice(0,200)||'Untitled resource';
 }
 
+function suffixedName(name:string,suffix:string){
+ const dot=name.lastIndexOf('.');
+ return dot>0?`${name.slice(0,dot)} ${suffix}${name.slice(dot)}`:`${name} ${suffix}`;
+}
+
+async function availableName(wid:string,parentId:string,original:string,messageId?:number){
+ const base=safeFileName(original);
+ if(!(await pool.query('SELECT 1 FROM nodes WHERE workspace_id=$1 AND parent_id=$2 AND name=$3 AND deleted_at IS NULL',[wid,parentId,base])).rowCount)return base;
+ const label=`(Telegram ${messageId||'copy'})`;
+ let candidate=safeFileName(suffixedName(base,label)),counter=2;
+ while((await pool.query('SELECT 1 FROM nodes WHERE workspace_id=$1 AND parent_id=$2 AND name=$3 AND deleted_at IS NULL',[wid,parentId,candidate])).rowCount){
+  candidate=safeFileName(suffixedName(base,`${label} ${counter++}`));
+ }
+ return candidate;
+}
+
 async function telegramFolder(wid:string,userId:string|null){
  const name='Telegram — P.7 Teachers in Uganda';
  const found=(await pool.query("SELECT id FROM nodes WHERE workspace_id=$1 AND parent_id IS NULL AND kind='folder' AND name=$2 AND deleted_at IS NULL",[wid,name])).rows[0];
@@ -31,7 +47,7 @@ async function adoptFile(wid:string,userId:string|null,event:WorkerEvent){
  const duplicate=(await pool.query("SELECT id,name FROM nodes WHERE workspace_id=$1 AND kind='file' AND sha256=$2 AND deleted_at IS NULL LIMIT 1",[wid,event.sha256])).rows[0];
  if(duplicate){await rm(event.path,{force:true});return duplicate;}
  const folderId=await telegramFolder(wid,userId),id=newId(),blobKey=wid+'/'+newId(),target=blobPath(blobKey);
- const filename=safeFileName(event.name);
+ const filename=await availableName(wid,folderId,event.name,event.message_id);
  await mkdir(dirname(target),{recursive:true,mode:0o700});
  await rename(event.path,target);
  try{
@@ -69,9 +85,13 @@ async function runJob(jobId:string,wid:string,userId:string|null){
  for(const key of required)if(!process.env[key])throw new Error(`${key} is not configured`);
  const output=join(process.env.STORAGE_DIR||'/data','.telegram',jobId);
  await mkdir(output,{recursive:true,mode:0o700});
+ const cursor=(await pool.query(`SELECT coalesce(
+   (SELECT greatest(min(message_id)-1,0) FROM telegram_items WHERE workspace_id=$1 AND status IN ('failed','downloading')),
+   (SELECT max(message_id) FROM telegram_items WHERE workspace_id=$1 AND status IN ('posted','skipped','stored')),
+   0) AS min_id`,[wid])).rows[0].min_id;
  const child=spawn('python3',['/app/plugins/telegram_worker.py','--api-id',process.env.TELEGRAM_API_ID!,
   '--api-hash',process.env.TELEGRAM_API_HASH!,'--session',process.env.TELEGRAM_SESSION!,
-  '--group',process.env.TELEGRAM_GROUP!,'--output',output,'--max-bytes',String(maxUploadBytes)],
+  '--group',process.env.TELEGRAM_GROUP!,'--output',output,'--max-bytes',String(maxUploadBytes),'--min-id',String(cursor)],
   {stdio:['pipe','pipe','pipe']});
  workers.set(jobId,child);
  await pool.query("UPDATE telegram_jobs SET status='running',updated_at=now(),error=NULL WHERE id=$1",[jobId]);
@@ -132,7 +152,11 @@ async function runJob(jobId:string,wid:string,userId:string|null){
  }catch(error){
   const status=(await pool.query('SELECT status FROM telegram_jobs WHERE id=$1',[jobId])).rows[0]?.status;
   if(status!=='paused')await pool.query("UPDATE telegram_jobs SET status='failed',error=$2,updated_at=now(),finished_at=now() WHERE id=$1",[jobId,(error as Error).message.slice(0,1000)]);
- }finally{workers.delete(jobId);await rm(output,{recursive:true,force:true}).catch(()=>{});}
+ }finally{
+  if(child.exitCode===null)child.kill('SIGTERM');
+  workers.delete(jobId);
+  await rm(output,{recursive:true,force:true}).catch(()=>{});
+ }
 }
 
 export const telegramRoutes:FastifyPluginAsync=async app=>{
@@ -145,7 +169,7 @@ export const telegramRoutes:FastifyPluginAsync=async app=>{
   const {wid}=await scope(req);const {id}=z.object({id:uuid}).parse(req.params);
   const job=(await pool.query('SELECT * FROM telegram_jobs WHERE id=$1 AND workspace_id=$2',[id,wid])).rows[0];
   if(!job)throw bad('Import job not found',404);
-  const items=await pool.query('SELECT * FROM telegram_items WHERE job_id=$1 ORDER BY created_at DESC LIMIT 300',[id]);
+  const items=await pool.query('SELECT * FROM telegram_items WHERE workspace_id=$1 ORDER BY updated_at DESC LIMIT 500',[wid]);
   return {job,items:items.rows};
  });
  app.post('/workspaces/:wid/plugins/telegram/jobs',async(req,reply)=>{
