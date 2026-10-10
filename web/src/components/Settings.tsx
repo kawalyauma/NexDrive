@@ -1,6 +1,7 @@
 import {useCallback,useEffect,useState} from 'react';
 import {KeyRound,Users,Plus,Copy,Trash2,ShieldCheck,Info,Check,UserPlus} from 'lucide-react';
 import {api,type Workspace} from '../api';
+import AccountSecurity from './AccountSecurity';
 type Member={id:string;name:string;email:string;role:string};
 type ServiceKey={id:string;name:string;permission:string;created_at:string};
 type Activity={id:string;action:string;created_at:string;details:Record<string,unknown>};
@@ -125,5 +126,6 @@ export default function Settings({workspace}: {workspace:Workspace}){
       <time>{new Date(event.created_at).toLocaleString()}</time></div>)}
    </div>
   </section>}
+  <AccountSecurity/>
  </div>;
 }

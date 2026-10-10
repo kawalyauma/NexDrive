@@ -59,7 +59,8 @@ export default function App(){
   <main className="content">
    <header className="mobile-header"><span className="logo-mark"><Cloud size={21}/></span><strong>NexDrive</strong>
     <select aria-label="Mobile workspace" value={workspaceId} onChange={e=>{setWorkspaceId(e.target.value);setPage("drive");}}>{profile.workspaces.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select>
-    <select aria-label="Mobile page" value={page} onChange={e=>setPage(e.target.value as 'drive'|'settings')}><option value="drive">Files</option><option value="settings">Settings</option></select></header>
+    <select aria-label="Mobile page" value={page} onChange={e=>setPage(e.target.value as 'drive'|'settings')}><option value="drive">Files</option><option value="settings">Settings</option></select>
+    <button className="mobile-logout" title="Sign out" aria-label="Sign out" onClick={()=>void logout()}><LogOut size={19}/></button></header>
    {invite&&<div className="invite-banner"><Users size={18}/> You have a pending workspace invitation. <button onClick={()=>void acceptInvite()}>Accept invitation</button></div>}
    {error&&<div className="alert error" role="alert">{error}<button onClick={()=>setError('')}>×</button></div>}
    {workspace?(page==='drive'?<Drive key={workspace.id} workspace={workspace}/>:<Settings key={workspace.id} workspace={workspace}/>):

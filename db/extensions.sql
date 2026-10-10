@@ -35,3 +35,13 @@ CREATE TABLE IF NOT EXISTS audit_events (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS audit_events_workspace_idx ON audit_events(workspace_id,created_at DESC);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id uuid PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL,
+  revoked_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions(expires_at);

@@ -14,6 +14,8 @@ export default function Drive({workspace}:Props){
  const [nodes,setNodes]=useState<DriveNode[]>([]),[loading,setLoading]=useState(true);
  const [error,setError]=useState(''),[notice,setNotice]=useState('');
  const [uploading,setUploading]=useState(false);
+ const [dragging,setDragging]=useState(false);
+ const [uploadedCount,setUploadedCount]=useState(0);
  const [usage,setUsage]=useState({usedBytes:'0',quotaBytes:workspace.quota_bytes});
  const fileInput=useRef<HTMLInputElement>(null);
  const base='/workspaces/'+workspace.id;
@@ -52,12 +54,12 @@ export default function Drive({workspace}:Props){
  }
  async function upload(files:FileList|null){
   if(!files?.length)return;
-  setUploading(true);setError('');let done=0;
+  setUploading(true);setUploadedCount(0);setError('');let done=0;
   try{
    for(const file of Array.from(files)){
     const form=new FormData();form.append('file',file);
     await api(base+'/upload'+(folderId?'?parentId='+folderId:''),{method:'POST',body:form});
-    done++;
+    done++;setUploadedCount(done);
    }
    setNotice(done+' file'+(done===1?'':'s')+' uploaded successfully.');
    await load();
@@ -92,14 +94,18 @@ export default function Drive({workspace}:Props){
   await action('/nodes/'+item.id+'/copy','POST',{name});
  }
  const percentage=Math.min(100,Number(usage.usedBytes)/Math.max(1,Number(usage.quotaBytes))*100);
- return <div className="drive-screen">
+ return <div className={'drive-screen'+(dragging?' is-dragging':'')}
+  onDragOver={e=>{if(Array.from(e.dataTransfer.types).includes('Files')){e.preventDefault();setDragging(true);}}}
+  onDragLeave={e=>{if(e.currentTarget.contains(e.relatedTarget as Node))return;setDragging(false);}}
+  onDrop={e=>{e.preventDefault();setDragging(false);void upload(e.dataTransfer.files);}}>
   <div className="topline"><div><span className="eyebrow">YOUR WORKSPACE</span>
    <h1>{search?'Search results':mode==='trash'?'Trash':mode==='starred'?'Starred':mode==='recent'?'Recent files':'My files'}</h1>
    <p className="muted">All your important things, right where you need them.</p></div>
    <div className="top-actions"><button className="outline" onClick={()=>void makeFolder()}><FolderPlus size={18}/> New folder</button>
-    <button className="primary" disabled={uploading} onClick={()=>fileInput.current?.click()}><UploadCloud size={18}/> {uploading?'Uploading…':'Upload files'}</button>
+    <button className="primary" disabled={uploading} onClick={()=>fileInput.current?.click()}><UploadCloud size={18}/> {uploading?'Uploaded '+uploadedCount+'…':'Upload files'}</button>
     <input ref={fileInput} type="file" multiple hidden onChange={e=>void upload(e.target.files)}/></div>
   </div>
+  {dragging&&<div className="drop-notice">Drop files here to upload them to this folder</div>}
   <div className="metrics-row">
    <div className="metric"><div className="metric-icon"><HardDrive size={21}/></div><div><small>Storage used</small><strong>{friendlySize(usage.usedBytes)} <span>/ {friendlySize(usage.quotaBytes)}</span></strong></div>
     <div className="meter"><span style={{width:percentage+'%'}}/></div></div>

@@ -18,7 +18,9 @@ export function bad(message:string,statusCode=400):Error{
  return Object.assign(new Error(message),{statusCode});
 }
 export async function setSession(reply:FastifyReply,id:string):Promise<void>{
- const token=await new SignJWT({sub:id}).setProtectedHeader({alg:'HS256'})
+ const jti=newId();
+ await pool.query("INSERT INTO sessions(id,user_id,expires_at) VALUES($1,$2,now()+interval '7 days')",[jti,id]);
+ const token=await new SignJWT({sub:id}).setProtectedHeader({alg:'HS256'}).setJti(jti)
  .setIssuedAt().setIssuer('nexdrive').setAudience('nexdrive-web').setExpirationTime('7d').sign(secret);
  reply.setCookie('nexdrive_session',token,{
  path:'/',httpOnly:true,secure:isProduction,sameSite:'lax',maxAge:604800});
@@ -36,8 +38,10 @@ export async function resolvePrincipal(req:FastifyRequest):Promise<Principal|nul
  if(!token)return null;
  try{
  const {payload}=await jwtVerify(token,secret,{issuer:'nexdrive',audience:'nexdrive-web'});
- if(typeof payload.sub!=='string')return null;
- const user=(await pool.query('SELECT id,email FROM users WHERE id=$1',[payload.sub])).rows[0];
+ if(typeof payload.sub!=='string'||typeof payload.jti!=='string')return null;
+ const user=(await pool.query(
+  'SELECT u.id,u.email FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.user_id=$2 AND s.expires_at>now() AND s.revoked_at IS NULL',
+  [payload.jti,payload.sub])).rows[0];
  return user?{type:'user',id:user.id,email:user.email}:null;
  }catch{return null;}
 }
@@ -65,4 +69,16 @@ export function requireSameOrigin(req:FastifyRequest):void{
  if(origin&&origin!==publicOrigin&&!(process.env.NODE_ENV!=='production'&&origin==='http://localhost:5173'))
  throw bad('Origin denied',403);
  if(!origin&&req.cookies.nexdrive_session)throw bad('Origin required',403);
+}
+
+export async function revokeSession(req:FastifyRequest):Promise<void>{
+ const token=req.cookies.nexdrive_session;
+ if(!token)return;
+ try{
+  const {payload}=await jwtVerify(token,secret,{issuer:'nexdrive',audience:'nexdrive-web'});
+  if(typeof payload.sub==='string'&&typeof payload.jti==='string'){
+   await pool.query('UPDATE sessions SET revoked_at=now() WHERE id=$1 AND user_id=$2',
+    [payload.jti,payload.sub]);
+  }
+ }catch{ /* expired/invalid cookie is still cleared by caller */ }
 }

@@ -1,0 +1,4 @@
+.drop-notice{background:#d9f6e8;border:2px dashed #1da887;color:#176f56;border-radius:13px;text-align:center;padding:24px;font-weight:800;margin-bottom:22px}
+.drive-screen.is-dragging{outline:3px dashed #25ac92;outline-offset:10px;border-radius:13px}
+.mobile-logout{border:0;background:#e7f3ed;color:#236955;border-radius:9px;display:grid;place-items:center;width:35px;height:35px;flex:0 0 35px}
+@media(max-width:680px){.mobile-header{gap:6px}.mobile-header strong{font-size:18px}.mobile-header select{font-size:11px;max-width:95px;padding:7px 2px}.top-actions .outline,.top-actions .primary{padding:0 9px}}

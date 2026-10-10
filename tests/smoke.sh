@@ -60,4 +60,45 @@ curl -fsS -X POST -b "$temp/cookies" -H "$origin" \
  "$base/workspaces/$wid/nodes/$id/restore" >/dev/null
 curl -fsS -b "$temp/cookies" "$base/workspaces/$wid/nodes/$id/download" > "$temp/restored.txt"
 cmp "$temp/upload.txt" "$temp/restored.txt"
+# Favorites are per-user.
+curl -fsS -X POST -b "$temp/cookies" -H "$origin" "$base/workspaces/$wid/nodes/$id/star" >/dev/null
+starred="$(curl -fsS -b "$temp/cookies" "$base/workspaces/$wid/starred")"
+node -e 'if(!JSON.parse(process.argv[1]).nodes.some(n=>n.id===process.argv[2]))process.exit(1)' "$starred" "$id"
+curl -fsS -X DELETE -b "$temp/cookies" -H "$origin" "$base/workspaces/$wid/nodes/$id/star" >/dev/null
+
+# Duplicate a file without losing its content.
+copy="$(curl -fsS -b "$temp/cookies" -H "$origin" -H 'Content-Type: application/json' \
+ -d '{"name":"Copied report.txt"}' "$base/workspaces/$wid/nodes/$id/copy")"
+copyId="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).id)' "$copy")"
+curl -fsS -b "$temp/cookies" "$base/workspaces/$wid/nodes/$copyId/download" > "$temp/copied.txt"
+cmp "$temp/upload.txt" "$temp/copied.txt"
+
+# New revision does not erase the original; restoring keeps the history.
+printf 'New version of NexDrive smoke test\n' > "$temp/updated.txt"
+curl -fsS -b "$temp/cookies" -H "$origin" -F "file=@$temp/updated.txt" \
+ "$base/workspaces/$wid/nodes/$id/versions" >/dev/null
+curl -fsS -b "$temp/cookies" "$base/workspaces/$wid/nodes/$id/download" > "$temp/current.txt"
+cmp "$temp/updated.txt" "$temp/current.txt"
+curl -fsS -b "$temp/cookies" "$base/workspaces/$wid/nodes/$id/versions/1/download" > "$temp/v1.txt"
+cmp "$temp/upload.txt" "$temp/v1.txt"
+curl -fsS -X POST -b "$temp/cookies" -H "$origin" \
+ "$base/workspaces/$wid/nodes/$id/versions/1/restore" >/dev/null
+curl -fsS -b "$temp/cookies" "$base/workspaces/$wid/nodes/$id/download" > "$temp/restored_v1.txt"
+cmp "$temp/upload.txt" "$temp/restored_v1.txt"
+
+# Team invitation: a new member joins a workspace but cannot administer it.
+invite="$(curl -fsS -b "$temp/cookies" -H "$origin" -H 'Content-Type: application/json' \
+ -d '{"email":"teammate@nexdrive.test","role":"member"}' "$base/workspaces/$wid/invitations")"
+inviteToken="$(node -e 'process.stdout.write(new URL(JSON.parse(process.argv[1]).url).searchParams.get("invite"))' "$invite")"
+node -e 'process.stdout.write(JSON.stringify({name:"Teammate",email:"teammate@nexdrive.test",password:"a-different-very-long-password",inviteToken:process.argv[1]}))' \
+ "$inviteToken" > "$temp/invite-register.json"
+curl -fsS -c "$temp/member-cookie" -H 'Content-Type: application/json' \
+ --data-binary "@$temp/invite-register.json" "$base/auth/register" >/dev/null
+curl -fsS -b "$temp/member-cookie" "$base/workspaces/$wid/nodes" >/dev/null
+expect_status 403 -b "$temp/member-cookie" "$base/workspaces/$wid/members"
+expect_status 403 -b "$temp/member-cookie" "$base/workspaces/$wid/activity"
+
+# Session logout actually revokes the JWT, including when an old cookie is replayed.
+curl -fsS -X POST -b "$temp/cookies" -H "$origin" "$base/auth/logout" >/dev/null
+expect_status 401 -b "$temp/cookies" "$base/auth/me"
 echo 'NexDrive API smoke test passed'

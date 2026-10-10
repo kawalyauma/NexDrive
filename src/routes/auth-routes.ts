@@ -2,7 +2,7 @@ import type {FastifyPluginAsync} from 'fastify';
 import argon2 from 'argon2';
 import {z} from 'zod';
 import {pool,transaction} from '../db.js';
-import {bad,digest,newId,requireUser,resolvePrincipal,setSession} from '../auth.js';
+import {bad,digest,newId,requireUser,resolvePrincipal,setSession,revokeSession} from '../auth.js';
 import {defaultQuotaBytes} from '../storage.js';
 
 const registerSchema=z.object({
@@ -53,9 +53,23 @@ export const authRoutes:FastifyPluginAsync=async app=>{
   await setSession(reply,user.id);
   return {id:user.id,name:user.name,email:user.email};
  });
- app.post('/auth/logout',async(_req,reply)=>{
+ app.post('/auth/logout',async(req,reply)=>{
+  await revokeSession(req);
   reply.clearCookie('nexdrive_session',{path:'/'});
   return {ok:true};
+ });
+ app.post('/auth/logout-all',async(req,reply)=>{
+  const principal=await resolvePrincipal(req);requireUser(principal);
+  await pool.query('UPDATE sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL',[principal.id]);
+  reply.clearCookie('nexdrive_session',{path:'/'});
+  return {ok:true};
+ });
+ app.get('/auth/sessions',async req=>{
+  const principal=await resolvePrincipal(req);requireUser(principal);
+  const r=await pool.query(
+   'SELECT id,created_at,expires_at FROM sessions WHERE user_id=$1 AND revoked_at IS NULL AND expires_at>now() ORDER BY created_at DESC',
+   [principal.id]);
+  return {sessions:r.rows};
  });
  app.get('/auth/me',async(req)=>{
   const p=await resolvePrincipal(req);requireUser(p);
