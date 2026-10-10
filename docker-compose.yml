@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nexdrive}
+      POSTGRES_USER: ${POSTGRES_USER:-nexdrive}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-nexdrive}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-nexdrive}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN in .env}
+      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-false}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-268435456}
+      DEFAULT_WORKSPACE_QUOTA_BYTES: ${DEFAULT_WORKSPACE_QUOTA_BYTES:-10737418240}
+      STORAGE_DIR: /data
+    volumes:
+      - nexdrive_data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+volumes:
+  postgres_data:
+  nexdrive_data:

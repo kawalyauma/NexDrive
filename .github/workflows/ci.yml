@@ -1,0 +1,41 @@
+name: NexDrive CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nexdrive
+          POSTGRES_PASSWORD: nexdrive-ci-password
+          POSTGRES_DB: nexdrive
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nexdrive -d nexdrive"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://nexdrive:nexdrive-ci-password@localhost:5432/nexdrive
+      SESSION_SECRET: local-ci-session-secret-longer-than-thirty-two
+      PUBLIC_ORIGIN: http://localhost:8080
+      NODE_ENV: test
+      STORAGE_DIR: /tmp/nexdrive-ci-data
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install API dependencies
+        run: npm install --no-audit --no-fund
+      - name: Install frontend dependencies
+        run: npm --prefix web install --no-audit --no-fund
+      - name: Compile backend and frontend
+        run: npm run build
+      - name: Start and smoke-test API
+        run: |
+          node dist/server.js >server.log 2>&1 &
+          bash tests/smoke.sh || (cat server.log && exit 1)
