@@ -3,10 +3,12 @@ import {newId} from './auth.js';
 import {runJob} from './telegram/importer.js';
 
 /**
- * Always-on Telegram importer (its own container): imports new files from the group, then waits and checks again.
+ * Always-on Telegram importer (its own container): imports new files from every group in TELEGRAM_GROUPS, then waits and checks again.
+ * A group seen for the first time is read from its very first message, so its whole history is imported.
  * The web app only shows its progress and can pause or resume it (telegram_service.enabled).
  */
-const POLL_SECONDS=Math.max(30,Number(process.env.TELEGRAM_POLL_SECONDS||60));
+const POLL_SECONDS=Math.max(30,Number(process.env.TELEGRAM_POLL_SECONDS||21600));
+const GROUPS=(process.env.TELEGRAM_GROUPS||process.env.TELEGRAM_GROUP||'').split(/[\s,]+/).map(g=>g.trim()).filter(Boolean);
 const sleep=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 let running=true;
 for(const sig of ['SIGTERM','SIGINT'] as const)process.on(sig,()=>{running=false;});
@@ -32,25 +34,33 @@ async function main(){
  await pool.query('INSERT INTO telegram_service(workspace_id) VALUES($1) ON CONFLICT DO NOTHING',[wid]);
  // A pass cut off by a restart is closed; the next pass resumes from the last processed message.
  await pool.query("UPDATE telegram_jobs SET status='failed',error='Interrupted by a restart; the service resumed from the last file',finished_at=now(),updated_at=now() WHERE workspace_id=$1 AND status IN ('queued','running')",[wid]);
- console.log(`Telegram service running for workspace ${wid}, checking every ${POLL_SECONDS}s`);
+ console.log(`Telegram service running for workspace ${wid}: ${GROUPS.length} group(s), checking every ${POLL_SECONDS}s`);
  while(running){
   if(!(await enabled(wid))){await setState(wid,'paused',{message:'Paused from NexDrive'});await sleep(5000);continue;}
-  const job=newId();
-  await pool.query("INSERT INTO telegram_jobs(id,workspace_id,group_ref,status) VALUES($1,$2,$3,'queued')",[job,wid,process.env.TELEGRAM_GROUP||'']);
-  await setState(wid,'importing',{job});
-  const beat=setInterval(()=>{void pool.query('UPDATE telegram_service SET heartbeat_at=now() WHERE workspace_id=$1',[wid]).catch(()=>{});},10000);
-  try{
-   await runJob(job,wid,null,async()=>!running||!(await enabled(wid)));
-  }catch(error){
-   const message=(error as Error).message.slice(0,500);
-   await pool.query("UPDATE telegram_jobs SET status='failed',error=$2,finished_at=now(),updated_at=now() WHERE id=$1 AND status IN ('queued','running')",[job,message]);
-  }finally{clearInterval(beat);}
-  const result=(await pool.query('SELECT status,error,discovered FROM telegram_jobs WHERE id=$1',[job])).rows[0];
-  // A pass that found nothing is not worth keeping in the history.
-  if(result?.status==='done'&&Number(result.discovered)===0)await pool.query('DELETE FROM telegram_jobs WHERE id=$1',[job]);
-  const failed=result?.status==='failed';
+  if(!GROUPS.length){await setState(wid,'error',{message:'No Telegram groups configured (TELEGRAM_GROUPS)'});await sleep(60000);continue;}
+  const problems:string[]=[];
+  for(const group of GROUPS){
+   if(!running||!(await enabled(wid)))break;
+   const job=newId();
+   await pool.query("INSERT INTO telegram_jobs(id,workspace_id,group_ref,status) VALUES($1,$2,$3,'queued')",[job,wid,group]);
+   await setState(wid,'importing',{job});
+   const beat=setInterval(()=>{void pool.query('UPDATE telegram_service SET heartbeat_at=now() WHERE workspace_id=$1',[wid]).catch(()=>{});},10000);
+   try{
+    await runJob(job,wid,null,async()=>!running||!(await enabled(wid)),group);
+   }catch(error){
+    const message=(error as Error).message.slice(0,500);
+    await pool.query("UPDATE telegram_jobs SET status='failed',error=$2,finished_at=now(),updated_at=now() WHERE id=$1 AND status IN ('queued','running')",[job,message]);
+   }finally{clearInterval(beat);}
+   const result=(await pool.query('SELECT status,error,discovered FROM telegram_jobs WHERE id=$1',[job])).rows[0];
+   // A pass that found nothing is not worth keeping in the history.
+   if(result?.status==='done'&&Number(result.discovered)===0)await pool.query('DELETE FROM telegram_jobs WHERE id=$1',[job]);
+   if(result?.status==='failed')problems.push(`${group.replace(/^https?:\/\/t\.me\//,'')}: ${result.error}`);
+  }
+  // One group failing never blocks the others; the pass is retried sooner only when every group failed.
+  const failed=problems.length===GROUPS.length;
+  const result={error:problems.join(' · ')||null};
   const wait=(failed?5*60:POLL_SECONDS)*1000, next=new Date(Date.now()+wait);
-  await setState(wid,failed?'error':'watching',{message:failed?result.error:null,next,pass:!failed});
+  await setState(wid,failed?'error':'watching',{message:result.error,next,pass:!failed});
   for(let waited=0;running&&waited<wait;waited+=5000){
    await sleep(5000);
    await pool.query('UPDATE telegram_service SET heartbeat_at=now() WHERE workspace_id=$1',[wid]);

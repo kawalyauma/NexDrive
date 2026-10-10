@@ -29,8 +29,8 @@ async function availableName(wid:string,parentId:string,original:string,messageI
  return candidate;
 }
 
-async function telegramFolder(wid:string,userId:string|null){
- const name='Telegram — P.7 Teachers in Uganda';
+async function telegramFolder(wid:string,userId:string|null,title:string){
+ const name=safeFileName(`Telegram — ${title}`);
  const found=(await pool.query("SELECT id FROM nodes WHERE workspace_id=$1 AND parent_id IS NULL AND kind='folder' AND name=$2 AND deleted_at IS NULL",[wid,name])).rows[0];
  if(found)return found.id as string;
  const id=newId();
@@ -38,11 +38,11 @@ async function telegramFolder(wid:string,userId:string|null){
  return id;
 }
 
-async function adoptFile(wid:string,userId:string|null,event:WorkerEvent){
+async function adoptFile(wid:string,userId:string|null,event:WorkerEvent,title:string){
  if(!event.path||!event.name||!event.sha256||!event.size||!event.mime_type)throw new Error('Incomplete worker result');
  const duplicate=(await pool.query("SELECT id,name FROM nodes WHERE workspace_id=$1 AND kind='file' AND sha256=$2 AND deleted_at IS NULL LIMIT 1",[wid,event.sha256])).rows[0];
  if(duplicate){await rm(event.path,{force:true});return duplicate;}
- const folderId=await telegramFolder(wid,userId),id=newId(),blobKey=wid+'/'+newId(),target=blobPath(blobKey);
+ const folderId=await telegramFolder(wid,userId,title),id=newId(),blobKey=wid+'/'+newId(),target=blobPath(blobKey);
  const filename=await availableName(wid,folderId,event.name,event.message_id);
  await mkdir(dirname(target),{recursive:true,mode:0o700});
  await rename(event.path,target);
@@ -58,13 +58,13 @@ async function adoptFile(wid:string,userId:string|null,event:WorkerEvent){
  }catch(error){await rm(target,{force:true});throw error;}
 }
 
-async function postToEduShare(nodeId:string,event:WorkerEvent){
+async function postToEduShare(nodeId:string,event:WorkerEvent,group:string,title:string){
  const base=process.env.EDUSHARE_URL?.replace(/\/$/,'');
  const key=process.env.EDUSHARE_INTEGRATION_KEY;
  if(!base||!key)throw new Error('EduShare integration is not configured');
  const response=await fetch(base+'/api/integrations/telegram/resources',{
   method:'POST',headers:{'content-type':'application/json','x-integration-key':key},
-  body:JSON.stringify({nodeId,messageId:event.message_id,group:process.env.TELEGRAM_GROUP,
+  body:JSON.stringify({nodeId,messageId:event.message_id,group,source:title,
    fileName:event.name,sizeBytes:event.size,sha256:event.sha256,title:titleFromName(event.name!),
    description:event.caption||undefined})
  });
@@ -80,37 +80,40 @@ async function postToEduShare(nodeId:string,event:WorkerEvent){
  * One import pass: reads the group from the last processed message onwards, downloads new teaching files into the drive
  * and registers them on EduShare. `shouldStop` is checked every few seconds so a pause takes effect mid-download.
  */
-export async function runJob(jobId:string,wid:string,userId:string|null,shouldStop:()=>Promise<boolean>=async()=>false){
- const required=['TELEGRAM_API_ID','TELEGRAM_API_HASH','TELEGRAM_GROUP','TELEGRAM_SESSION'] as const;
+export async function runJob(jobId:string,wid:string,userId:string|null,shouldStop:()=>Promise<boolean>=async()=>false,group=process.env.TELEGRAM_GROUP||''){
+ const required=['TELEGRAM_API_ID','TELEGRAM_API_HASH','TELEGRAM_SESSION'] as const;
  for(const key of required)if(!process.env[key])throw new Error(`${key} is not configured`);
  const output=join(process.env.STORAGE_DIR||'/data','.telegram',jobId);
  await mkdir(output,{recursive:true,mode:0o700});
  const cursor=(await pool.query(`SELECT greatest(coalesce(
-   (SELECT min(message_id)-1 FROM telegram_items WHERE workspace_id=$1 AND status IN ('failed','downloading')),
-   (SELECT max(message_id) FROM telegram_items WHERE workspace_id=$1 AND status IN ('posted','skipped','stored')),
-   0),0) AS min_id`,[wid])).rows[0].min_id;
+   (SELECT min(message_id)-1 FROM telegram_items WHERE workspace_id=$1 AND group_ref=$2 AND status IN ('failed','downloading')),
+   (SELECT max(message_id) FROM telegram_items WHERE workspace_id=$1 AND group_ref=$2 AND status IN ('posted','skipped','stored')),
+   0),0) AS min_id`,[wid,group])).rows[0].min_id;
  const child=spawn('python3',['/app/plugins/telegram_worker.py','--api-id',process.env.TELEGRAM_API_ID!,
   '--api-hash',process.env.TELEGRAM_API_HASH!,'--session',process.env.TELEGRAM_SESSION!,
-  '--group',process.env.TELEGRAM_GROUP!,'--output',output,'--max-bytes',String(maxUploadBytes),'--min-id',String(cursor)],
+  '--group',group,'--output',output,'--max-bytes',String(maxUploadBytes),'--min-id',String(cursor)],
   {stdio:['pipe','pipe','pipe']});
  let stopped=false;
  const watch=setInterval(()=>{void shouldStop().then(stop=>{if(stop&&!stopped){stopped=true;child.kill('SIGTERM');}}).catch(()=>{});},5000);
  await pool.query("UPDATE telegram_jobs SET status='running',updated_at=now(),error=NULL WHERE id=$1",[jobId]);
- let currentItem:string|null=null;
+ let currentItem:string|null=null,title=group.replace(/^https?:\/\/t\.me\//,'');
  const lines=createInterface({input:child.stdout});
  try{
   for await(const line of lines){
    const event=JSON.parse(line) as WorkerEvent;
-   if(event.event==='candidate'){
+   if(event.event==='connected'){
+    title=event.group||title;
+    await pool.query('UPDATE telegram_jobs SET group_title=$2,updated_at=now() WHERE id=$1',[jobId,title]);
+   }else if(event.event==='candidate'){
     const inserted=(await pool.query("INSERT INTO telegram_items(id,job_id,workspace_id,group_ref,message_id,file_name,size_bytes,status) VALUES($1,$2,$3,$4,$5,$6,$7,'downloading') ON CONFLICT(workspace_id,group_ref,message_id) DO NOTHING RETURNING id",
-     [newId(),jobId,wid,process.env.TELEGRAM_GROUP,event.message_id,event.name,event.size])).rows[0];
+     [newId(),jobId,wid,group,event.message_id,event.name,event.size])).rows[0];
     await pool.query('UPDATE telegram_jobs SET discovered=discovered+1,current_file=$2,current_bytes=0,current_total=$3,updated_at=now() WHERE id=$1',[jobId,event.name,event.size]);
     if(!inserted){
      const existing=(await pool.query('SELECT id,node_id,sha256,size_bytes,status FROM telegram_items WHERE workspace_id=$1 AND group_ref=$2 AND message_id=$3',
-      [wid,process.env.TELEGRAM_GROUP,event.message_id])).rows[0];
+      [wid,group,event.message_id])).rows[0];
      if(existing?.status==='failed'&&existing.node_id&&existing.sha256){
       try{
-       const posted=await postToEduShare(existing.node_id,{...event,sha256:existing.sha256,size:Number(existing.size_bytes)});
+       const posted=await postToEduShare(existing.node_id,{...event,sha256:existing.sha256,size:Number(existing.size_bytes)},group,title);
        const status=posted.duplicate?'skipped':'posted';
        await pool.query('UPDATE telegram_items SET status=$2,edushare_resource_id=$3,edushare_slug=$4,error=NULL,updated_at=now() WHERE id=$1',
         [existing.id,status,posted.resource?.id||null,posted.resource?.slug||null]);
@@ -132,10 +135,10 @@ export async function runJob(jobId:string,wid:string,userId:string|null,shouldSt
     await pool.query('UPDATE telegram_jobs SET current_bytes=$2,current_total=$3,updated_at=now() WHERE id=$1',[jobId,event.done,event.total]);
    }else if(event.event==='complete'&&currentItem){
     try{
-     const node=await adoptFile(wid,userId,event);
+     const node=await adoptFile(wid,userId,event,title);
      await pool.query("UPDATE telegram_items SET node_id=$2,sha256=$3,size_bytes=$4,status='stored',updated_at=now() WHERE id=$1",[currentItem,node.id,event.sha256,event.size]);
      await pool.query('UPDATE telegram_jobs SET downloaded=downloaded+1,bytes_downloaded=bytes_downloaded+$2 WHERE id=$1',[jobId,event.size]);
-     const posted=await postToEduShare(node.id,event);
+     const posted=await postToEduShare(node.id,event,group,title);
      await pool.query("UPDATE telegram_items SET status=$2,edushare_resource_id=$3,edushare_slug=$4,updated_at=now() WHERE id=$1",
       [currentItem,posted.duplicate?'skipped':'posted',posted.resource?.id||null,posted.resource?.slug||null]);
      await pool.query(`UPDATE telegram_jobs SET ${posted.duplicate?'skipped':'posted'}=${posted.duplicate?'skipped':'posted'}+1,current_bytes=0,updated_at=now() WHERE id=$1`,[jobId]);

@@ -124,6 +124,13 @@ CREATE TABLE IF NOT EXISTS fresh_teacher_items (
  UNIQUE(workspace_id,repo,path,blob_sha)
 );
 CREATE INDEX IF NOT EXISTS fresh_teacher_items_recent_idx ON fresh_teacher_items(workspace_id,updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS fresh_teacher_settings (
+ workspace_id uuid PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+ mode text NOT NULL DEFAULT 'licensed_downloads'
+  CHECK(mode IN ('licensed_downloads','all_index')),
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
 CREATE INDEX IF NOT EXISTS telegram_items_job_idx ON telegram_items(job_id,created_at DESC);
 
 -- The always-on Telegram importer (telegram-service container). The web app toggles `enabled` and shows the state.
@@ -134,3 +141,4 @@ CREATE TABLE IF NOT EXISTS telegram_service (
  heartbeat_at timestamptz, last_pass_at timestamptz, next_pass_at timestamptz,
  updated_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE telegram_jobs ADD COLUMN IF NOT EXISTS group_title text;
