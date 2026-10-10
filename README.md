@@ -68,6 +68,7 @@ See [API reference](docs/API.md), [operations & backup guide](docs/OPERATIONS.md
 - Apply security patches, monitor free disk space, and limit reverse-proxy upload sizes.
 - GitHub Actions CI compiles the app and performs an HTTP smoke test using PostgreSQL; verify the first CI run succeeds before trusting production deployment.
 - The initial release uses local disk. **Run one app instance only**; use an object-storage adapter before scaling to multiple nodes.
-- API keys are powerful credentials; scope them to the intended workspace and revoke promptly when lost.
+- API keys are powerful credentials; scope them to the intended workspace and revoke promptly when lost. **A key can access the entire workspace**, not merely one folder. Create separate workspaces for apps that must not see each other's files.
+- Only put the application behind a trusted reverse proxy. HTTP port 8080 stays bound to localhost; the API trusts exactly one proxy hop for client IP rate limiting.
 
 This is an initial foundation, **not yet a complete Google Drive clone**. Chunked/resumable transfers, malware scanning, content search, granular per-file ACLs, comprehensive auditing, SSO and desktop synchronization are planned but not included. Avoid storing highly sensitive regulated files until threat modeling, review and restore testing are complete.

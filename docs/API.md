@@ -59,7 +59,7 @@ Lists are limited to 200 results in this foundation; pagination will follow. Sto
 | POST | `/workspaces/:wid/api-keys` | `{name,permission:'read'|'write'}`; response includes secret **once** |
 | DELETE | `/workspaces/:wid/api-keys/:id` | Revoke key |
 
-Read-only app keys can list/download/search. Write keys can additionally mutate and share files, but cannot administer membership or mint new API keys. All key requests are restricted to the one workspace attached to the key.
+Read-only app keys can list/download/search. **Keys are workspace-wide and not folder-restricted.** Use separate workspaces for different applications when isolation matters. Write keys can additionally mutate and share files, but cannot administer membership or mint new API keys. All key requests are restricted to the one workspace attached to the key.
 
 ## Errors and safety
 

@@ -4,6 +4,7 @@ import {pool} from '../db.js';
 import {bad,newId,digest,newOpaqueToken,publicOrigin} from '../auth.js';
 import {streamBlob,downloadName} from '../storage.js';
 import {scope,node,uuid} from './util.js';
+import {audit} from '../audit.js';
 export async function registerNodeShares(app:FastifyInstance){
  app.post('/workspaces/:wid/nodes/:id/shares',async req=>{
   const {wid,principal}=await scope(req,'write');
@@ -15,6 +16,7 @@ export async function registerNodeShares(app:FastifyInstance){
   await pool.query(
    "INSERT INTO shares(id,workspace_id,node_id,token_hash,expires_at,created_by) VALUES($1,$2,$3,$4,now()+($5::int * interval '1 day'),$6)",
    [newId(),wid,id,digest(token),days,principal?.type==='user'?principal.id:null]);
+  await audit(wid,principal,'share.created',id,{days});
   return {url:publicOrigin+'/api/shares/'+token,expiresInDays:days};
  });
  app.get('/workspaces/:wid/nodes/:id/shares',async req=>{
@@ -27,12 +29,13 @@ export async function registerNodeShares(app:FastifyInstance){
   return {shares:r.rows};
  });
  app.delete('/workspaces/:wid/nodes/:id/shares',async req=>{
-  const {wid}=await scope(req,'write');
+  const {wid,principal}=await scope(req,'write');
   const {id}=z.object({id:uuid}).parse(req.params);
   await node(wid,id);
   const r=await pool.query(
    'UPDATE shares SET revoked_at=now() WHERE workspace_id=$1 AND node_id=$2 AND revoked_at IS NULL RETURNING id',
    [wid,id]);
+  await audit(wid,principal,'share.revoked',id,{count:r.rowCount});
   return {revoked:r.rowCount};
  });
  app.get('/shares/:token',async(req,reply)=>{

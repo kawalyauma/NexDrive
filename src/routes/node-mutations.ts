@@ -2,6 +2,7 @@ import type {FastifyInstance} from 'fastify';
 import {z} from 'zod';
 import {pool} from '../db.js';
 import {bad} from '../auth.js';
+import {audit} from '../audit.js';
 import {safeFileName,streamBlob,downloadName} from '../storage.js';
 import {scope,folder,node,uuid} from './util.js';
 import {registerNodeTrash} from './node-trash.js';
@@ -17,7 +18,7 @@ export async function registerNodeMutations(app:FastifyInstance){
    .type('application/octet-stream').send(streamBlob(item.blob_key));
  });
  app.patch('/workspaces/:wid/nodes/:id',async req=>{
-  const {wid}=await scope(req,'write');
+  const {wid,principal}=await scope(req,'write');
   const {id}=z.object({id:uuid}).parse(req.params);
   const input=z.object({name:z.string().optional(),parentId:uuid.nullable().optional()}).parse(req.body);
   if(input.name===undefined&&input.parentId===undefined)throw bad('Nothing to update');
@@ -37,6 +38,7 @@ export async function registerNodeMutations(app:FastifyInstance){
   const r=await pool.query(
    'UPDATE nodes SET name=$1,parent_id=$2,updated_at=now() WHERE id=$3 AND workspace_id=$4 AND deleted_at IS NULL RETURNING id,name,parent_id',
    [filename,parent,id,wid]);
+  await audit(wid,principal,'node.updated',id,{name:filename,parentId:parent});
   return r.rows[0];
  });
  await registerNodeTrash(app);

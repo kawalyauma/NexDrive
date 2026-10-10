@@ -17,7 +17,7 @@ export async function registerNodeTrash(app:FastifyInstance){
   return {ok:true};
  });
  app.post('/workspaces/:wid/nodes/:id/restore',async req=>{
-  const {wid}=await scope(req,'write');
+  const {wid,principal}=await scope(req,'write');
   const {id}=z.object({id:uuid}).parse(req.params);
   const item=await node(wid,id,true);
   if(!item.deleted_at)throw bad('Item is not in trash');
@@ -25,10 +25,11 @@ export async function registerNodeTrash(app:FastifyInstance){
   await pool.query(
    'WITH RECURSIVE tree AS (SELECT id FROM nodes WHERE id=$1 AND workspace_id=$2 UNION ALL SELECT n.id FROM nodes n JOIN tree t ON n.parent_id=t.id WHERE n.workspace_id=$2) UPDATE nodes SET deleted_at=NULL WHERE id IN (SELECT id FROM tree) AND deleted_at=$3',
    [id,wid,item.deleted_at]);
+  await audit(wid,principal,'node.restored',id);
   return {ok:true};
  });
  app.delete('/workspaces/:wid/nodes/:id',async req=>{
-  const {wid}=await scope(req,'write');
+  const {wid,principal}=await scope(req,'write');
   const {id}=z.object({id:uuid}).parse(req.params);
   const item=await node(wid,id,true);
   if(!item.deleted_at)throw bad('Move to trash first');
@@ -42,6 +43,7 @@ export async function registerNodeTrash(app:FastifyInstance){
    return r.rows as {blob_key:string}[];
   });
   for(const file of files)await removeBlob(file.blob_key).catch(err=>app.log.error(err));
+  await audit(wid,principal,'node.deleted_permanently',id,{blobCount:files.length});
   return {ok:true};
  });
 }

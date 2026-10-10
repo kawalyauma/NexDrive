@@ -98,7 +98,18 @@ curl -fsS -b "$temp/member-cookie" "$base/workspaces/$wid/nodes" >/dev/null
 expect_status 403 -b "$temp/member-cookie" "$base/workspaces/$wid/members"
 expect_status 403 -b "$temp/member-cookie" "$base/workspaces/$wid/activity"
 
-# Session logout actually revokes the JWT, including when an old cookie is replayed.
-curl -fsS -X POST -b "$temp/cookies" -H "$origin" "$base/auth/logout" >/dev/null
+# File metadata and sharing actions produce workspace audit entries.
+events="$(curl -fsS -b "$temp/cookies" "$base/workspaces/$wid/activity")"
+node -e 'if(!JSON.parse(process.argv[1]).events.some(e=>e.action==="file.uploaded"))process.exit(1)' "$events"
+# Text files should not be embedded as web previews.
+expect_status 415 -b "$temp/cookies" "$base/workspaces/$wid/nodes/$id/preview"
+# Password rotation invalidates older cookies and issues a new session.
+curl -fsS -c "$temp/rotated-cookie" -b "$temp/cookies" -H "$origin" -H 'Content-Type: application/json' \
+ -d '{"currentPassword":"a-very-long-test-password","newPassword":"an-updated-strong-password"}' \
+ "$base/auth/change-password" >/dev/null
 expect_status 401 -b "$temp/cookies" "$base/auth/me"
+curl -fsS -b "$temp/rotated-cookie" "$base/auth/me" >/dev/null
+# Logout revokes the current JWT, even if an old cookie is replayed.
+curl -fsS -X POST -b "$temp/rotated-cookie" -H "$origin" "$base/auth/logout" >/dev/null
+expect_status 401 -b "$temp/rotated-cookie" "$base/auth/me"
 echo 'NexDrive API smoke test passed'

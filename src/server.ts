@@ -21,7 +21,7 @@ async function start(){
  if(!Number.isSafeInteger(maxUploadBytes)||maxUploadBytes<1)throw new Error('Invalid MAX_UPLOAD_BYTES');
  await initDatabase();
  const app=Fastify({logger:{redact:['req.headers.authorization','req.headers.cookie','res.headers.set-cookie']},
-  disableRequestLogging:true,bodyLimit:1024*1024,trustProxy:false});
+  disableRequestLogging:true,bodyLimit:1024*1024,trustProxy:1});
  await app.register(cookie);
  await app.register(rateLimit,{max:180,timeWindow:'1 minute'});
  await app.register(multipart,{limits:{fileSize:maxUploadBytes,files:1,fields:3},throwFileSizeLimit:false});

@@ -31,6 +31,7 @@ export const managementRoutes:FastifyPluginAsync=async app=>{
   await pool.query(
    "INSERT INTO invitations(id,workspace_id,email,role,token_hash,created_by,expires_at) VALUES($1,$2,$3,$4,$5,$6,now()+interval '7 days')",
    [id,wid,email,role,digest(token),principal.id]);
+  await audit(wid,principal,'member.invited',null,{email,role});
   return reply.code(201).send({url:publicOrigin+'/?invite='+encodeURIComponent(token),
    expiresInDays:7,email,role});
  });
@@ -82,12 +83,13 @@ export const managementRoutes:FastifyPluginAsync=async app=>{
   return reply.code(201).send({id,name,permission,token});
  });
  app.delete('/workspaces/:wid/api-keys/:id',async req=>{
-  const {wid}=await scope(req,'admin');
+  const {wid,principal}=await scope(req,'admin');
   const {id}=z.object({id:uuid}).parse(req.params);
   const r=await pool.query(
    'UPDATE api_keys SET revoked_at=now() WHERE id=$1 AND workspace_id=$2 AND revoked_at IS NULL RETURNING id',
    [id,wid]);
   if(!r.rowCount)throw bad('API key not found',404);
+  await audit(wid,principal,'api_key.revoked',null,{keyId:id});
   return {ok:true};
  });
 };

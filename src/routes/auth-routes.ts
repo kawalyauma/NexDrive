@@ -64,6 +64,24 @@ export const authRoutes:FastifyPluginAsync=async app=>{
   reply.clearCookie('nexdrive_session',{path:'/'});
   return {ok:true};
  });
+ app.post('/auth/change-password',{config:{rateLimit:{max:5,timeWindow:'1 minute'}}},async(req,reply)=>{
+  const principal=await resolvePrincipal(req);requireUser(principal);
+  const {currentPassword,newPassword}=z.object({
+   currentPassword:z.string().min(1),newPassword:z.string().min(12).max(256)
+  }).parse(req.body);
+  if(currentPassword===newPassword)throw bad('Choose a different password');
+  const user=(await pool.query('SELECT password_hash FROM users WHERE id=$1',
+   [principal.id])).rows[0];
+  if(!user||!(await argon2.verify(user.password_hash,currentPassword)))
+   throw bad('Current password is incorrect',403);
+  const newHash=await argon2.hash(newPassword,{type:argon2.argon2id});
+  await transaction(async db=>{
+   await db.query('UPDATE users SET password_hash=$1 WHERE id=$2',[newHash,principal.id]);
+   await db.query('UPDATE sessions SET revoked_at=now() WHERE user_id=$1',[principal.id]);
+  });
+  await setSession(reply,principal.id);
+  return {ok:true};
+ });
  app.get('/auth/sessions',async req=>{
   const principal=await resolvePrincipal(req);requireUser(principal);
   const r=await pool.query(

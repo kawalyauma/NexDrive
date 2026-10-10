@@ -11,6 +11,7 @@ export async function initDatabase():Promise<void>{
  const schema=await readFile(resolve(process.cwd(),'db/schema.sql'),'utf8');
  await pool.query(schema);
  await pool.query(await readFile(resolve(process.cwd(),'db/extensions.sql'),'utf8'));
+ await pool.query("DELETE FROM sessions WHERE expires_at < now()-interval '7 days'");
 }
 export async function transaction<T>(fn:(client:pg.PoolClient)=>Promise<T>):Promise<T>{
  const client=await pool.connect();
