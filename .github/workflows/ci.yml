@@ -21,6 +21,7 @@ jobs:
     env:
       DATABASE_URL: postgres://nexdrive:nexdrive-ci-password@localhost:5432/nexdrive
       SESSION_SECRET: local-ci-session-secret-longer-than-thirty-two
+      BOOTSTRAP_TOKEN: local-ci-setup-token-longer-than-twenty-four
       PUBLIC_ORIGIN: http://localhost:8080
       NODE_ENV: test
       STORAGE_DIR: /tmp/nexdrive-ci-data

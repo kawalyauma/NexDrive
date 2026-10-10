@@ -29,6 +29,7 @@ export async function resolvePrincipal(req:FastifyRequest):Promise<Principal|nul
  const key=(await pool.query('SELECT id,workspace_id,permission FROM api_keys WHERE key_hash=$1 AND revoked_at IS NULL',
  [digest(header.slice(7))])).rows[0];
  if(!key)return null;
+ await pool.query('UPDATE api_keys SET last_used_at=now() WHERE id=$1',[key.id]);
  return {type:'app',id:key.id,workspaceId:key.workspace_id,permission:key.permission};
  }
  const token=req.cookies.nexdrive_session;

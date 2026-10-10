@@ -56,6 +56,13 @@ export default function Drive({workspace}:Props){
   }catch(e){setError('Uploaded '+done+' file(s). '+(e as Error).message);}
   finally{setUploading(false);if(fileInput.current)fileInput.current.value='';}
  }
+ async function revokeLinks(item:DriveNode){
+  if(!window.confirm('Revoke all active shared links for '+item.name+'?'))return;
+  try{
+   const result=await api<{revoked:number}>(base+'/nodes/'+item.id+'/shares',{method:'DELETE'});
+   setNotice(result.revoked+' sharing link(s) revoked.');
+  }catch(e){setError((e as Error).message);}
+ }
  async function share(item:DriveNode){
   try{
    const result=await api<{url:string}>(base+'/nodes/'+item.id+'/shares',{method:'POST',json:{days:7}});
@@ -103,7 +110,7 @@ export default function Drive({workspace}:Props){
       <><button title="Download" disabled={item.kind==='folder'} onClick={()=>window.location.assign('/api'+base+'/nodes/'+item.id+'/download')}><Download size={17}/></button>
       <details className="item-menu"><summary aria-label={'Actions for '+item.name}><MoreHorizontal size={20}/></summary><div className="menu-items">
        {item.kind==='folder'&&<button onClick={()=>openFolder(item)}><Folder size={15}/> Open</button>}
-       {item.kind==='file'&&<button onClick={()=>void share(item)}><Share2 size={15}/> Share link</button>}
+       {item.kind==='file'&&<><button onClick={()=>void share(item)}><Share2 size={15}/> Share link</button><button onClick={()=>void revokeLinks(item)}><Trash2 size={15}/> Revoke links</button></>}
        <button onClick={()=>{const name=window.prompt('Rename',item.name);if(name?.trim())void action('/nodes/'+item.id,'PATCH',{name});}}><Pencil size={15}/> Rename</button>
        {folderId&&<button onClick={()=>void action('/nodes/'+item.id,'PATCH',{parentId:null})}><ArrowLeft size={15}/> Move to root</button>}
        <button onClick={()=>void action('/nodes/'+item.id+'/trash','POST')}><Trash2 size={15}/> Move to trash</button>

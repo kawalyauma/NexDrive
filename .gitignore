@@ -3,5 +3,7 @@ dist/
 web/dist/
 web/node_modules/
 .env
+.env.*
+!.env.example
 data/
 *.log

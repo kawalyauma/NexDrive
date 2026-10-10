@@ -32,6 +32,8 @@ Replace `:wid` with the workspace UUID and `:id` with the node UUID.
 | GET | `/workspaces/:wid/usage` | Usage and quota |
 | POST | `/workspaces/:wid/nodes/:id/shares` | `{days:1..30}`, read-only link (file only) |
 | GET | `/shares/:token` | Anonymous expiring attachment download |
+| GET | `/workspaces/:wid/nodes/:id/shares` | List active shares (no token disclosed) |
+| DELETE | `/workspaces/:wid/nodes/:id/shares` | Revoke all active shares for a node |
 
 Lists are limited to 200 results in this foundation; pagination will follow. Storage quotas count all non-purged blobs, **including trash**.
 

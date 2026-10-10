@@ -13,7 +13,7 @@ const registerSchema=z.object({
  inviteToken:z.string().optional()
 });
 export const authRoutes:FastifyPluginAsync=async app=>{
- app.post('/auth/register',async(req,reply)=>{
+ app.post('/auth/register',{config:{rateLimit:{max:5,timeWindow:'1 minute'}}},async(req,reply)=>{
   const form=registerSchema.parse(req.body);
   const passwordHash=await argon2.hash(form.password,{type:argon2.argon2id});
   const id=newId();
@@ -46,7 +46,7 @@ export const authRoutes:FastifyPluginAsync=async app=>{
   await setSession(reply,id);
   return reply.code(201).send({id,name:form.name,email:form.email});
  });
- app.post('/auth/login',async(req,reply)=>{
+ app.post('/auth/login',{config:{rateLimit:{max:8,timeWindow:'1 minute'}}},async(req,reply)=>{
   const form=z.object({email:z.string().email(),password:z.string()}).parse(req.body);
   const user=(await pool.query('SELECT * FROM users WHERE email=$1',[form.email.toLowerCase()])).rows[0];
   if(!user||!(await argon2.verify(user.password_hash,form.password)))throw bad('Invalid login',401);

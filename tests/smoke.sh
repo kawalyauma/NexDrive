@@ -6,7 +6,7 @@ trap 'rm -rf "$temp"' EXIT
 curl -fsS --retry 15 --retry-connrefused --retry-delay 1 "$base/health" >/dev/null
 printf 'NexDrive smoke test\n' > "$temp/upload.txt"
 curl -fsS -c "$temp/cookies" -H 'Content-Type: application/json' \
- -d '{"name":"Test Admin","email":"admin@nexdrive.test","password":"a-very-long-test-password"}' \
+ -d '{"name":"Test Admin","email":"admin@nexdrive.test","password":"a-very-long-test-password","bootstrapToken":"local-ci-setup-token-longer-than-twenty-four"}' \
  "$base/auth/register" > "$temp/register.json"
 me="$(curl -fsS -b "$temp/cookies" "$base/auth/me")"
 wid="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).workspaces[0].id)' "$me")"

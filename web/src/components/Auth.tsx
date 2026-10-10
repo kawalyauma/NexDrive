@@ -6,12 +6,13 @@ export default function Auth({onAuthenticated,invite}:Props){
  const [register,setRegister]=useState(Boolean(invite));
  const [name,setName]=useState(''),[email,setEmail]=useState('');
  const [password,setPassword]=useState(''),[error,setError]=useState('');
+ const [bootstrapToken,setBootstrapToken]=useState('');
  const [busy,setBusy]=useState(false);
  async function submit(e:React.FormEvent){
   e.preventDefault();setError('');setBusy(true);
   try{
    if(register)await api('/auth/register',{method:'POST',
-    json:{name,email,password,inviteToken:invite||undefined}});
+    json:{name,email,password,inviteToken:invite||undefined,bootstrapToken:bootstrapToken||undefined}});
    else{
     await api('/auth/login',{method:'POST',json:{email,password}});
     if(invite)await api('/invitations/accept',{method:'POST',json:{token:invite}});
@@ -39,7 +40,8 @@ export default function Auth({onAuthenticated,invite}:Props){
      {register&&<label>Full name<input required maxLength={120} value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"/></label>}
      <label>Email address<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/></label>
      <label>Password<input required type="password" minLength={register?12:1} value={password} onChange={e=>setPassword(e.target.value)} placeholder="Enter your password"/></label>
-     {register&&<small className="muted">Use at least 12 characters for your password.</small>}
+     {register&&!invite&&<label>Initial setup token (first user only)<input type="password" value={bootstrapToken} onChange={e=>setBootstrapToken(e.target.value)} placeholder="From your server .env"/></label>}
+     {register&&<small className="muted">Use at least 12 characters for your password. On a new server, enter its setup token.</small>}
      {error&&<div className="alert error" role="alert">{error}</div>}
      <button className="primary full" disabled={busy}>{busy?'Please wait…':register?'Create account':'Sign in'} <ArrowRight size={17}/></button>
     </form>

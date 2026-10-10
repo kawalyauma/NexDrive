@@ -17,6 +17,24 @@ export async function registerNodeShares(app:FastifyInstance){
    [newId(),wid,id,digest(token),days,principal?.type==='user'?principal.id:null]);
   return {url:publicOrigin+'/api/shares/'+token,expiresInDays:days};
  });
+ app.get('/workspaces/:wid/nodes/:id/shares',async req=>{
+  const {wid}=await scope(req);
+  const {id}=z.object({id:uuid}).parse(req.params);
+  await node(wid,id);
+  const r=await pool.query(
+   'SELECT id,created_at,expires_at FROM shares WHERE workspace_id=$1 AND node_id=$2 AND revoked_at IS NULL AND expires_at>now() ORDER BY created_at DESC',
+   [wid,id]);
+  return {shares:r.rows};
+ });
+ app.delete('/workspaces/:wid/nodes/:id/shares',async req=>{
+  const {wid}=await scope(req,'write');
+  const {id}=z.object({id:uuid}).parse(req.params);
+  await node(wid,id);
+  const r=await pool.query(
+   'UPDATE shares SET revoked_at=now() WHERE workspace_id=$1 AND node_id=$2 AND revoked_at IS NULL RETURNING id',
+   [wid,id]);
+  return {revoked:r.rowCount};
+ });
  app.get('/shares/:token',async(req,reply)=>{
   const {token}=z.object({token:z.string().min(30).max(128)}).parse(req.params);
   const item=(await pool.query(

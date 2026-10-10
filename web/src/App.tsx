@@ -4,8 +4,8 @@ import {api,type Profile} from './api';
 import Auth from './components/Auth';
 import Drive from './components/Drive';
 import Settings from './components/Settings';
-const invite=new URLSearchParams(window.location.search).get('invite');
 export default function App(){
+ const [invite,setInvite]=useState<string|null>(()=>new URLSearchParams(window.location.search).get('invite'));
  const [profile,setProfile]=useState<Profile|null>(null);
  const [loading,setLoading]=useState(true),[error,setError]=useState('');
  const [workspaceId,setWorkspaceId]=useState('');
@@ -16,6 +16,10 @@ export default function App(){
   }catch{setProfile(null);}finally{setLoading(false);}
  }
  useEffect(()=>{void refresh();},[]);
+ async function finishAuth(){
+  if(invite){history.replaceState({},'',location.pathname);setInvite(null);}
+  await refresh();
+ }
  async function logout(){
   await api('/auth/logout',{method:'POST'});setProfile(null);setWorkspaceId('');
  }
@@ -27,11 +31,11 @@ export default function App(){
  async function acceptInvite(){
   if(!invite)return;
   try{await api('/invitations/accept',{method:'POST',json:{token:invite}});
-   history.replaceState({},'',location.pathname);await refresh();setError('');}
+   history.replaceState({},'',location.pathname);setInvite(null);await refresh();setError('');}
   catch(e){setError((e as Error).message);}
  }
  if(loading)return <div className="loading-screen"><Cloud size={38}/><h2>NexDrive</h2><p>Opening your workspace…</p></div>;
- if(!profile)return <Auth onAuthenticated={refresh} invite={invite}/>;
+ if(!profile)return <Auth onAuthenticated={()=>void finishAuth()} invite={invite}/>;
  const workspace=profile.workspaces.find(w=>w.id===workspaceId);
  return <div className="app-shell">
   <aside className="sidebar">
@@ -54,7 +58,8 @@ export default function App(){
   </aside>
   <main className="content">
    <header className="mobile-header"><span className="logo-mark"><Cloud size={21}/></span><strong>NexDrive</strong>
-    <select value={page} onChange={e=>setPage(e.target.value as 'drive'|'settings')}><option value="drive">My files</option><option value="settings">Settings</option></select></header>
+    <select aria-label="Mobile workspace" value={workspaceId} onChange={e=>{setWorkspaceId(e.target.value);setPage("drive");}}>{profile.workspaces.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select>
+    <select aria-label="Mobile page" value={page} onChange={e=>setPage(e.target.value as 'drive'|'settings')}><option value="drive">Files</option><option value="settings">Settings</option></select></header>
    {invite&&<div className="invite-banner"><Users size={18}/> You have a pending workspace invitation. <button onClick={()=>void acceptInvite()}>Accept invitation</button></div>}
    {error&&<div className="alert error" role="alert">{error}<button onClick={()=>setError('')}>×</button></div>}
    {workspace?(page==='drive'?<Drive key={workspace.id} workspace={workspace}/>:<Settings key={workspace.id} workspace={workspace}/>):

@@ -64,6 +64,7 @@ See [API reference](docs/API.md) and [roadmap](docs/ROADMAP.md).
 - Schedule encrypted offsite backups of PostgreSQL and the file volume; regularly test recovery.
 - Keep ALLOW_SIGNUP=false and use long random secrets; protect the .env file from other system users.
 - Apply security patches, monitor free disk space, and limit reverse-proxy upload sizes.
+- GitHub Actions CI compiles the app and performs an HTTP smoke test using PostgreSQL; verify the first CI run succeeds before trusting production deployment.
 - The initial release uses local disk. **Run one app instance only**; use an object-storage adapter before scaling to multiple nodes.
 - API keys are powerful credentials; scope them to the intended workspace and revoke promptly when lost.
 
