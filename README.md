@@ -56,7 +56,7 @@ curl -X POST -H "Authorization: Bearer nd_WRITE_KEY" \
  "https://drive.example.org/api/workspaces/WORKSPACE_UUID/upload"
 ```
 
-See [API reference](docs/API.md) and [roadmap](docs/ROADMAP.md).
+See [API reference](docs/API.md), [operations & backup guide](docs/OPERATIONS.md), and [roadmap](docs/ROADMAP.md).
 
 ## Operational security / backups
 
