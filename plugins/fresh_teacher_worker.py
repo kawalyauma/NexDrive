@@ -11,7 +11,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-SUPPORTED = {'.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.odt', '.txt'}
+SUPPORTED = {'.pdf', '.doc', '.docx'}
 
 
 def github_headers():
