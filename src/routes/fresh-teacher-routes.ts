@@ -71,8 +71,14 @@ async function runWatcher(wid:string){
    await pool.query('UPDATE fresh_teacher_sources SET scanned=scanned+1,current_file=$3,updated_at=now() WHERE workspace_id=$1 AND repo=$2',[wid,event.repo,event.path]);
    let item=(await pool.query("INSERT INTO fresh_teacher_items(id,workspace_id,repo,path,blob_sha,commit_sha,license,file_name,size_bytes,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'downloading') ON CONFLICT(workspace_id,repo,path,blob_sha) DO NOTHING RETURNING id",[newId(),wid,event.repo,event.path,event.blob_sha,event.commit,event.license,event.name,event.size])).rows[0];
    if(!item){const old=(await pool.query('SELECT * FROM fresh_teacher_items WHERE workspace_id=$1 AND repo=$2 AND path=$3 AND blob_sha=$4',[wid,event.repo,event.path,event.blob_sha])).rows[0];
-    if(old.status==='failed'&&!old.node_id){await pool.query("UPDATE fresh_teacher_items SET status='downloading',error=NULL,updated_at=now() WHERE id=$1",[old.id]);item=old;}
-    else{child.stdin.write('skip\n');continue;}}
+    if(['failed','downloading'].includes(old.status)&&!old.node_id){await pool.query("UPDATE fresh_teacher_items SET status='downloading',error=NULL,updated_at=now() WHERE id=$1",[old.id]);item=old;}
+    else if(['failed','stored'].includes(old.status)&&old.node_id&&old.sha256){
+     try{const result=await post(old.node_id,{...event,sha256:old.sha256,size:Number(old.size_bytes)}),status=result.duplicate?'skipped':'posted';
+      await pool.query('UPDATE fresh_teacher_items SET status=$2,edushare_resource_id=$3,edushare_slug=$4,error=NULL,updated_at=now() WHERE id=$1',[old.id,status,result.resource?.id||null,result.resource?.slug||null]);
+      await pool.query(`UPDATE fresh_teacher_sources SET ${status}=${status}+1,error=NULL,updated_at=now() WHERE workspace_id=$1 AND repo=$2`,[wid,event.repo]);
+     }catch(error){const message=(error as Error).message.slice(0,500);await pool.query("UPDATE fresh_teacher_items SET status='failed',error=$2,updated_at=now() WHERE id=$1",[old.id,message]);}
+     child.stdin.write('skip\n');continue;
+    }else{child.stdin.write('skip\n');continue;}}
    current=item.id;child.stdin.write('download\n');
   }else if(event.event==='complete'&&current){
    try{const node=await adopt(wid,event);await pool.query("UPDATE fresh_teacher_items SET node_id=$2,sha256=$3,size_bytes=$4,status='stored',updated_at=now() WHERE id=$1",[current,node.id,event.sha256,event.size]);
