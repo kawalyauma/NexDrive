@@ -3,12 +3,13 @@ import {z} from 'zod';
 import {pool} from '../db.js';
 import {bad,newId,digest,newOpaqueToken,publicOrigin,requireUser} from '../auth.js';
 import {scope,uuid} from './util.js';
+import {audit} from '../audit.js';
 export const managementRoutes:FastifyPluginAsync=async app=>{
  app.get('/workspaces/:wid/usage',async req=>{
   const {wid}=await scope(req);
   const ws=(await pool.query('SELECT name,quota_bytes FROM workspaces WHERE id=$1',[wid])).rows[0];
   const used=(await pool.query(
-   "SELECT coalesce(sum(size_bytes),0)::text AS used FROM nodes WHERE workspace_id=$1 AND kind='file'",
+   "SELECT ((SELECT coalesce(sum(size_bytes),0) FROM nodes WHERE workspace_id=$1 AND kind='file')+(SELECT coalesce(sum(size_bytes),0) FROM file_versions WHERE workspace_id=$1))::text AS used",
    [wid])).rows[0].used;
   return {name:ws.name,quotaBytes:String(ws.quota_bytes),usedBytes:used};
  });
@@ -49,6 +50,7 @@ export const managementRoutes:FastifyPluginAsync=async app=>{
   await pool.query(
    'INSERT INTO api_keys(id,workspace_id,name,permission,key_hash,created_by) VALUES($1,$2,$3,$4,$5,$6)',
    [id,wid,name,permission,digest(token),principal.id]);
+  await audit(wid,principal,'api_key.created',null,{keyId:id,name,permission});
   return reply.code(201).send({id,name,permission,token});
  });
  app.delete('/workspaces/:wid/api-keys/:id',async req=>{

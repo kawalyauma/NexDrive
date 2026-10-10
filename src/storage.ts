@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, rename, rm } from 'node:fs/promises';
+import { mkdir, rename, rm, copyFile, constants } from 'node:fs/promises';
 import { resolve, join, dirname } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { MultipartFile } from '@fastify/multipart';
@@ -24,11 +24,18 @@ export async function saveUpload(file:MultipartFile,wid:string):Promise<{blobKey
  return {blobKey,size};
  } catch(err){await rm(temp,{force:true}).catch(()=>{});throw err;}
 }
+export async function cloneBlob(original:string,wid:string):Promise<string>{
+ const newKey=wid+'/'+randomUUID();
+ const target=blobPath(newKey);
+ await mkdir(dirname(target),{recursive:true,mode:0o700});
+ await copyFile(blobPath(original),target,constants.COPYFILE_EXCL);
+ return newKey;
+}
 export async function removeBlob(key:string):Promise<void>{await rm(blobPath(key),{force:true});}
 export function streamBlob(key:string){return createReadStream(blobPath(key));}
 export function safeFileName(name:string):string{
  const x=name.trim().normalize('NFC');
- if(!x||x.length>255||x.includes('/')||x.includes('\\')||x==='.'||x==='..')throw bad('Invalid name');
+ if(!x||x.length>255||/[\\/\\\\\\x00-\\x1f\\x7f]/.test(x)||x==='.'||x==='..')throw bad('Invalid name');
  return x;
 }
 export function downloadName(name:string):string {

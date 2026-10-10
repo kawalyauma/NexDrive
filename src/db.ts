@@ -10,6 +10,7 @@ export async function initDatabase():Promise<void>{
   throw new Error('Configure DATABASE_URL or PGHOST/PGUSER/PGPASSWORD/PGDATABASE');
  const schema=await readFile(resolve(process.cwd(),'db/schema.sql'),'utf8');
  await pool.query(schema);
+ await pool.query(await readFile(resolve(process.cwd(),'db/extensions.sql'),'utf8'));
 }
 export async function transaction<T>(fn:(client:pg.PoolClient)=>Promise<T>):Promise<T>{
  const client=await pool.connect();
