@@ -13,7 +13,7 @@ export const nodeRoutes:FastifyPluginAsync=async app=>{
    trash:z.enum(['true','false']).optional()}).parse(req.query);
   if(input.q){
    const r=await pool.query(
-    "SELECT id,parent_id,kind,name,size_bytes,mime_type FROM nodes WHERE workspace_id=$1 AND deleted_at IS NULL AND name ILIKE $2 ORDER BY kind,name LIMIT 200",
+    "SELECT id,parent_id,kind,name,size_bytes,mime_type,version_number FROM nodes WHERE workspace_id=$1 AND deleted_at IS NULL AND name ILIKE $2 ORDER BY kind,name LIMIT 200",
     [wid,'%'+input.q+'%']);
    return {nodes:r.rows};
   }
@@ -24,7 +24,7 @@ export const nodeRoutes:FastifyPluginAsync=async app=>{
   }
   await folder(wid,input.parentId||null);
   const r=await pool.query(
-   'SELECT id,parent_id,kind,name,size_bytes,mime_type,created_at FROM nodes WHERE workspace_id=$1 AND parent_id IS NOT DISTINCT FROM $2::uuid AND deleted_at IS NULL ORDER BY kind,lower(name) LIMIT 200',
+   'SELECT id,parent_id,kind,name,size_bytes,mime_type,version_number,created_at FROM nodes WHERE workspace_id=$1 AND parent_id IS NOT DISTINCT FROM $2::uuid AND deleted_at IS NULL ORDER BY kind,lower(name) LIMIT 200',
    [wid,input.parentId||null]);
   return {nodes:r.rows};
  });

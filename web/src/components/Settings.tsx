@@ -3,8 +3,10 @@ import {KeyRound,Users,Plus,Copy,Trash2,ShieldCheck,Info,Check,UserPlus} from 'l
 import {api,type Workspace} from '../api';
 type Member={id:string;name:string;email:string;role:string};
 type ServiceKey={id:string;name:string;permission:string;created_at:string};
+type Activity={id:string;action:string;created_at:string;details:Record<string,unknown>};
 export default function Settings({workspace}: {workspace:Workspace}){
  const [members,setMembers]=useState<Member[]>([]),[keys,setKeys]=useState<ServiceKey[]>([]);
+ const [activity,setActivity]=useState<Activity[]>([]);
  const [email,setEmail]=useState(''),[role,setRole]=useState<'member'|'admin'>('member');
  const [keyName,setKeyName]=useState(''),[permission,setPermission]=useState<'read'|'write'>('read');
  const [secret,setSecret]=useState(''),[inviteUrl,setInviteUrl]=useState('');
@@ -14,10 +16,11 @@ export default function Settings({workspace}: {workspace:Workspace}){
  const load=useCallback(async()=>{
   if(!isAdmin)return;
   try{
-   const [m,k]=await Promise.all([
+   const [m,k,events]=await Promise.all([
     api<{members:Member[]}>(base+'/members'),
-    api<{keys:ServiceKey[]}>(base+'/api-keys')]);
-   setMembers(m.members);setKeys(k.keys);
+    api<{keys:ServiceKey[]}>(base+'/api-keys'),
+    api<{events:Activity[]}>(base+'/activity')]);
+   setMembers(m.members);setKeys(k.keys);setActivity(events.events);
   }catch(e){setError((e as Error).message);}
  },[base,isAdmin]);
  useEffect(()=>{void load();},[load]);
@@ -36,6 +39,15 @@ export default function Settings({workspace}: {workspace:Workspace}){
    setSecret(result.token);setKeyName('');setMessage('Key created. Copy it now — it will not be shown again.');
    await load();
   }catch(err){setError((err as Error).message);}
+ }
+ async function setMemberRole(member:Member,role:'member'|'admin'){
+  try{await api(base+'/members/'+member.id,{method:'PATCH',json:{role}});await load();}
+  catch(e){setError((e as Error).message);}
+ }
+ async function removeMember(member:Member){
+  if(!window.confirm('Remove '+member.name+' from '+workspace.name+'?'))return;
+  try{await api(base+'/members/'+member.id,{method:'DELETE'});await load();}
+  catch(e){setError((e as Error).message);}
  }
  async function revoke(id:string){
   if(!window.confirm('Revoke this API key immediately?'))return;
@@ -58,7 +70,12 @@ export default function Settings({workspace}: {workspace:Workspace}){
     {isAdmin?members.map(member=><div className="member-row" key={member.id}>
      <div className="member-avatar">{member.name[0]?.toUpperCase()}</div>
      <div className="member-info"><strong>{member.name}</strong><span>{member.email}</span></div>
-     <span className="role-pill">{member.role}</span></div>):
+     {workspace.role==='owner'&&member.role!=='owner'?<>
+      <select className="role-select" aria-label={'Role for '+member.name} value={member.role}
+       onChange={e=>void setMemberRole(member,e.target.value as 'admin'|'member')}>
+       <option value="member">Member</option><option value="admin">Admin</option></select>
+      <button className="icon-button danger" title={'Remove '+member.name} onClick={()=>void removeMember(member)}><Trash2 size={17}/></button>
+     </>:<span className="role-pill">{member.role}</span>}</div>):
      <p className="muted panel-note">Only workspace administrators can view and invite members.</p>}
    </div>
   </div>
@@ -96,6 +113,16 @@ export default function Settings({workspace}: {workspace:Workspace}){
       <div className="member-info"><strong>{k.name}</strong><span>{k.permission} access · Created {new Date(k.created_at).toLocaleDateString()}</span></div>
       <button className="icon-button danger" title="Revoke API key" onClick={()=>void revoke(k.id)}><Trash2 size={18}/></button>
      </div>)}
+   </div>
+  </section>}
+  {isAdmin&&<section className="setting-section">
+   <div className="section-heading"><div className="section-icon"><ShieldCheck size={22}/></div>
+    <div><h2>Recent activity</h2><p>Workspace actions recorded for administrators.</p></div></div>
+   <div className="settings-panel">
+    {activity.length===0?<p className="muted panel-note">No recorded actions yet.</p>:
+     activity.slice(0,25).map(event=><div className="activity-row" key={event.id}>
+      <span className="activity-dot"/><span>{event.action.replaceAll('.',' · ').replaceAll('_',' ')}</span>
+      <time>{new Date(event.created_at).toLocaleString()}</time></div>)}
    </div>
   </section>}
  </div>;

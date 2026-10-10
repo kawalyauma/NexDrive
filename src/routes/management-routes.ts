@@ -34,6 +34,34 @@ export const managementRoutes:FastifyPluginAsync=async app=>{
   return reply.code(201).send({url:publicOrigin+'/?invite='+encodeURIComponent(token),
    expiresInDays:7,email,role});
  });
+ app.patch('/workspaces/:wid/members/:id',async req=>{
+  const {wid,principal,role:actorRole}=await scope(req,'admin');
+  requireUser(principal);
+  if(actorRole!=='owner')throw bad('Only owners can change member roles',403);
+  const {id}=z.object({id:uuid}).parse(req.params);
+  const {role}=z.object({role:z.enum(['admin','member'])}).parse(req.body);
+  const target=(await pool.query(
+   'SELECT role FROM memberships WHERE workspace_id=$1 AND user_id=$2',[wid,id])).rows[0];
+  if(!target)throw bad('Member not found',404);
+  if(target.role==='owner')throw bad('Cannot change the owner',403);
+  await pool.query('UPDATE memberships SET role=$1 WHERE workspace_id=$2 AND user_id=$3',
+   [role,wid,id]);
+  await audit(wid,principal,'member.role_changed',null,{userId:id,role});
+  return {ok:true};
+ });
+ app.delete('/workspaces/:wid/members/:id',async req=>{
+  const {wid,principal,role:actorRole}=await scope(req,'admin');
+  requireUser(principal);
+  const {id}=z.object({id:uuid}).parse(req.params);
+  const target=(await pool.query('SELECT role FROM memberships WHERE workspace_id=$1 AND user_id=$2',
+   [wid,id])).rows[0];
+  if(!target)throw bad('Member not found',404);
+  if(target.role==='owner')throw bad('Cannot remove the owner',403);
+  if(target.role==='admin'&&actorRole!=='owner')throw bad('Only owners can remove admins',403);
+  await pool.query('DELETE FROM memberships WHERE workspace_id=$1 AND user_id=$2',[wid,id]);
+  await audit(wid,principal,'member.removed',null,{userId:id});
+  return {ok:true};
+ });
  app.get('/workspaces/:wid/api-keys',async req=>{
   const {wid}=await scope(req,'admin');
   const r=await pool.query(

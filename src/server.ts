@@ -12,6 +12,7 @@ import {maxUploadBytes} from './storage.js';
 import {authRoutes} from './routes/auth-routes.js';
 import {nodeRoutes} from './routes/node-routes.js';
 import {managementRoutes} from './routes/management-routes.js';
+import {fileActionsRoutes} from './routes/file-actions-routes.js';
 import {explorerRoutes} from './routes/explorer-routes.js';
 import {versionRoutes} from './routes/version-routes.js';
 
@@ -40,6 +41,7 @@ async function start(){
  await app.register(authRoutes,{prefix:'/api'});
  await app.register(nodeRoutes,{prefix:'/api'});
  await app.register(managementRoutes,{prefix:'/api'});
+ await app.register(fileActionsRoutes,{prefix:'/api'});
  await app.register(explorerRoutes,{prefix:'/api'});
  await app.register(versionRoutes,{prefix:'/api'});
  const webDir=resolve(process.cwd(),'web/dist');

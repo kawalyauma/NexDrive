@@ -29,7 +29,16 @@ Replace `:wid` with the workspace UUID and `:id` with the node UUID.
 | POST | `/workspaces/:wid/nodes/:id/trash` | Move item/subtree to trash |
 | POST | `/workspaces/:wid/nodes/:id/restore` | Restore deleted item/subtree |
 | DELETE | `/workspaces/:wid/nodes/:id` | Permanently delete a trashed item/subtree |
-| GET | `/workspaces/:wid/usage` | Usage and quota |
+| GET | `/workspaces/:wid/usage` | Usage and quota (including archived versions and trash) |
+| GET | `/workspaces/:wid/recent` | Recently modified files/folders |
+| GET | `/workspaces/:wid/starred` | Signed-in user's starred items |
+| POST / DELETE | `/workspaces/:wid/nodes/:id/star` | Star or unstar for signed-in user |
+| POST | `/workspaces/:wid/nodes/:id/copy` | `{name?}` duplicate a file |
+| GET | `/workspaces/:wid/nodes/:id/preview` | Inline sandboxed image or PDF preview |
+| GET | `/workspaces/:wid/nodes/:id/versions` | List current and archived revisions |
+| POST | `/workspaces/:wid/nodes/:id/versions` | Multipart file replacement, retaining old revision |
+| GET | `/workspaces/:wid/nodes/:id/versions/:version/download` | Download a revision |
+| POST | `/workspaces/:wid/nodes/:id/versions/:version/restore` | Restore archived revision as new current version |
 | POST | `/workspaces/:wid/nodes/:id/shares` | `{days:1..30}`, read-only link (file only) |
 | GET | `/shares/:token` | Anonymous expiring attachment download |
 | GET | `/workspaces/:wid/nodes/:id/shares` | List active shares (no token disclosed) |
@@ -42,6 +51,9 @@ Lists are limited to 200 results in this foundation; pagination will follow. Sto
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/workspaces/:wid/members` | Member list |
+| PATCH | `/workspaces/:wid/members/:id` | Owner-only role change (`{role:'admin'|'member'}`) |
+| DELETE | `/workspaces/:wid/members/:id` | Remove a member (owner protected) |
+| GET | `/workspaces/:wid/activity` | Admin workspace activity log |
 | POST | `/workspaces/:wid/invitations` | `{email,role:'admin'|'member'}`; response gives invite URL (no email is sent automatically) |
 | GET | `/workspaces/:wid/api-keys` | List keys (secrets never returned) |
 | POST | `/workspaces/:wid/api-keys` | `{name,permission:'read'|'write'}`; response includes secret **once** |

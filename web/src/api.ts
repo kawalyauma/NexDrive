@@ -1,6 +1,6 @@
 export type Workspace={id:string;name:string;role:'owner'|'admin'|'member';quota_bytes:string};
 export type Profile={user:{id:string;name:string;email:string};workspaces:Workspace[]};
-export type DriveNode={id:string;parent_id:string|null;kind:'folder'|'file';name:string;size_bytes:string;created_at?:string;deleted_at?:string};
+export type DriveNode={id:string;parent_id:string|null;kind:'folder'|'file';name:string;size_bytes:string;version_number?:number;mime_type?:string|null;created_at?:string;deleted_at?:string};
 export async function api<T=unknown>(path:string,options:RequestInit&{json?:unknown}={}):Promise<T>{
  const {json,...init}=options;
  const headers=new Headers(init.headers);

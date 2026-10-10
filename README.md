@@ -6,6 +6,8 @@
 
 - Multi-user workspaces, owner/admin/member roles and 7-day email-matched invitations
 - Folders, uploads, downloads, rename, move, search, trash, restore and permanent deletion
+- Starred and recent files, copies, image/PDF previews and file revision history
+- Member role management and basic workspace activity records
 - Storage quotas, per-upload limits and private files by default
 - 1–30 day downloadable links and revocable read/write API keys scoped to one workspace
 - HttpOnly signed login sessions, Argon2id passwords, server-side authorizations
@@ -68,4 +70,4 @@ See [API reference](docs/API.md), [operations & backup guide](docs/OPERATIONS.md
 - The initial release uses local disk. **Run one app instance only**; use an object-storage adapter before scaling to multiple nodes.
 - API keys are powerful credentials; scope them to the intended workspace and revoke promptly when lost.
 
-This is an initial foundation, **not yet a complete Google Drive clone**. File previews, versions, chunked/resumable transfers, malware scanning, content search, granular per-file ACLs, auditing, SSO and desktop synchronization are planned but not included. Avoid storing highly sensitive regulated files until threat modeling, review and restore testing are complete.
+This is an initial foundation, **not yet a complete Google Drive clone**. Chunked/resumable transfers, malware scanning, content search, granular per-file ACLs, comprehensive auditing, SSO and desktop synchronization are planned but not included. Avoid storing highly sensitive regulated files until threat modeling, review and restore testing are complete.

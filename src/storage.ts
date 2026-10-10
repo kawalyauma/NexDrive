@@ -35,7 +35,7 @@ export async function removeBlob(key:string):Promise<void>{await rm(blobPath(key
 export function streamBlob(key:string){return createReadStream(blobPath(key));}
 export function safeFileName(name:string):string{
  const x=name.trim().normalize('NFC');
- if(!x||x.length>255||/[\\/\\\\\\x00-\\x1f\\x7f]/.test(x)||x==='.'||x==='..')throw bad('Invalid name');
+ if(!x||x.length>255||x.includes('/')||x.includes(String.fromCharCode(92))||x==='.'||x==='..'||Array.from(x).some(ch=>ch.charCodeAt(0)<32||ch.charCodeAt(0)===127))throw bad('Invalid name');
  return x;
 }
 export function downloadName(name:string):string {

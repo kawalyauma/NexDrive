@@ -1,0 +1,6 @@
+.role-select{border:1px solid #d6e8df;background:white;color:#386354;border-radius:10px;padding:8px 10px;font-size:12px}
+.activity-row{display:flex;align-items:center;gap:12px;padding:15px 20px;border-bottom:1px solid #edf2ee;color:#365649;font-size:13px}
+.activity-row:last-child{border-bottom:0}
+.activity-row time{margin-left:auto;color:#889f96;font-size:11px;text-align:right}
+.activity-dot{width:9px;height:9px;flex:0 0 9px;border-radius:50%;background:#1aa48a}
+@media(max-width:680px){.activity-row{gap:7px;padding:12px}.activity-row time{font-size:10px}.member-info{min-width:0}.role-select{width:74px;padding:7px 3px}}
