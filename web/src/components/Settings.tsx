@@ -11,7 +11,7 @@ export default function Settings({workspace}: {workspace:Workspace}){
  const [email,setEmail]=useState(''),[role,setRole]=useState<'member'|'admin'>('member');
  const [keyName,setKeyName]=useState(''),[permission,setPermission]=useState<'read'|'write'>('read');
  const [secret,setSecret]=useState(''),[inviteUrl,setInviteUrl]=useState('');
- const [freshMode,setFreshMode]=useState<'licensed_downloads'|'all_index'>('licensed_downloads');
+ const [freshMode,setFreshMode]=useState<'licensed_downloads'|'all_downloads'>('licensed_downloads');
  const [message,setMessage]=useState(''),[error,setError]=useState('');
  const isAdmin=workspace.role!=='member';
  const base='/workspaces/'+workspace.id;
@@ -22,7 +22,7 @@ export default function Settings({workspace}: {workspace:Workspace}){
     api<{members:Member[]}>(base+'/members'),
     api<{keys:ServiceKey[]}>(base+'/api-keys'),
     api<{events:Activity[]}>(base+'/activity'),
-    api<{mode:'licensed_downloads'|'all_index'}>(base+'/plugins/fresh-teacher/settings')]);
+    api<{mode:'licensed_downloads'|'all_downloads'}>(base+'/plugins/fresh-teacher/settings')]);
    setMembers(m.members);setKeys(k.keys);setActivity(events.events);setFreshMode(fresh.mode);
   }catch(e){setError((e as Error).message);}
  },[base,isAdmin]);
@@ -92,11 +92,11 @@ export default function Settings({workspace}: {workspace:Workspace}){
     <div className="card-heading"><Github size={21}/><h3>Fresh Teacher downloads</h3></div>
     <p className="muted">Choose whether NexDrive downloads reusable files or only catalogs repository links.</p>
     <form onSubmit={saveFreshMode}>
-     <label>Repository policy<select value={freshMode} onChange={e=>setFreshMode(e.target.value as 'licensed_downloads'|'all_index')}>
+     <label>Repository policy<select value={freshMode} onChange={e=>setFreshMode(e.target.value as 'licensed_downloads'|'all_downloads')}>
       <option value="licensed_downloads">Licensed repositories — download files</option>
-      <option value="all_index">All repositories — index links only</option>
+      <option value="all_downloads">All repositories — download files</option>
      </select></label>
-     <p className="muted">Files without a recognised redistribution licence are never copied or posted to EduShare.</p>
+     <p className="muted">All-repositories mode is for content you own or are authorised to redistribute. Files remain EduShare drafts.</p>
      <button className="primary" type="submit"><Check size={17}/> Save download policy</button>
     </form>
    </section>

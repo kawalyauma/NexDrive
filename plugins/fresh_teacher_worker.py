@@ -14,6 +14,22 @@ from pathlib import Path
 SUPPORTED = {'.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.odt', '.txt'}
 
 
+def github_headers():
+    headers = {'User-Agent': 'Notesug-NexDrive/1.0', 'Accept': 'application/vnd.github+json'}
+    token = os.environ.get('GITHUB_TOKEN', '').strip()
+    credential_file = os.environ.get('GITHUB_CREDENTIAL_FILE', '').strip()
+    if not token and credential_file and os.path.isfile(credential_file):
+        try:
+            parsed = urllib.parse.urlparse(Path(credential_file).read_text().strip())
+            if parsed.hostname == 'github.com':
+                token = urllib.parse.unquote(parsed.password or '')
+        except (OSError, ValueError):
+            pass
+    if token:
+        headers['Authorization'] = f'Bearer {token}'
+    return headers
+
+
 def emit(event, **data):
     print(json.dumps({'event': event, **data}, ensure_ascii=False), flush=True)
 
@@ -56,7 +72,7 @@ async def scan_repo(args, repo, branch, license_name):
     if action == 'unchanged':
         return
     tree_url = f'https://api.github.com/repos/Fresh-Teacher/{urllib.parse.quote(repo)}/git/trees/{commit}?recursive=1'
-    request = urllib.request.Request(tree_url, headers={'User-Agent': 'Notesug-NexDrive/1.0', 'Accept': 'application/vnd.github+json'})
+    request = urllib.request.Request(tree_url, headers=github_headers())
     with urllib.request.urlopen(request, timeout=120) as response:
         tree = json.load(response)
     if tree.get('truncated'):
@@ -91,18 +107,19 @@ async def scan_repo(args, repo, branch, license_name):
 
 
 def public_repositories():
+    result = []
     page = 1
     while True:
         url = f'https://api.github.com/users/Fresh-Teacher/repos?per_page=100&page={page}'
-        request = urllib.request.Request(url, headers={'User-Agent': 'Notesug-NexDrive/1.0', 'Accept': 'application/vnd.github+json'})
+        request = urllib.request.Request(url, headers=github_headers())
         with urllib.request.urlopen(request, timeout=120) as response:
             repos = json.load(response)
         for repo in repos:
             license_info = repo.get('license') or {}
-            emit('catalog_repo', repo=repo['name'], branch=repo.get('default_branch') or 'main',
-                 license=license_info.get('spdx_id') or 'NONE', source_url=repo.get('html_url'))
+            result.append((repo['name'], repo.get('default_branch') or 'main',
+                           license_info.get('spdx_id') or 'NONE'))
         if len(repos) < 100:
-            return
+            return result
         page += 1
 
 
@@ -116,15 +133,14 @@ async def run(args):
         raise RuntimeError('No Fresh Teacher repositories configured')
     Path(args.output).mkdir(parents=True, exist_ok=True)
     while True:
-        if args.mode == 'all_index':
+        selected = repos
+        if args.mode == 'all_downloads':
             try:
-                await asyncio.to_thread(public_repositories)
+                selected = await asyncio.to_thread(public_repositories)
             except Exception as error:
-                emit('catalog_error', error=str(error)[:1000])
-            emit('idle', seconds=args.poll_seconds)
-            await asyncio.sleep(args.poll_seconds)
-            continue
-        for repo, branch, license_name in repos:
+                emit('repo_error', repo='Fresh-Teacher', error=f'Could not list repositories: {error}'[:1000])
+                selected = []
+        for repo, branch, license_name in selected:
             try:
                 await scan_repo(args, repo, branch, license_name)
             except Exception as error:
@@ -139,5 +155,5 @@ if __name__ == '__main__':
     parser.add_argument('--output', required=True)
     parser.add_argument('--max-bytes', type=int, required=True)
     parser.add_argument('--poll-seconds', type=int, default=900)
-    parser.add_argument('--mode', choices=('licensed_downloads', 'all_index'), default='licensed_downloads')
+    parser.add_argument('--mode', choices=('licensed_downloads', 'all_downloads'), default='licensed_downloads')
     asyncio.run(run(parser.parse_args()))

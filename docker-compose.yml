@@ -50,9 +50,11 @@ services:
       FRESH_TEACHER_WORKSPACE_ID: ${FRESH_TEACHER_WORKSPACE_ID:-}
       FRESH_TEACHER_REPOS: ${FRESH_TEACHER_REPOS:-primary:main:MIT,secondary:main:MIT}
       FRESH_TEACHER_POLL_SECONDS: ${FRESH_TEACHER_POLL_SECONDS:-900}
+      GITHUB_CREDENTIAL_FILE: /run/secrets/github_credentials
     volumes:
       - ${STORAGE_HOST_PATH:-nexdrive_data}:/data
       - ${TELEGRAM_SESSION_HOST_PATH:-./data/telegram-session}:/telegram
+      - ${GITHUB_CREDENTIAL_FILE:-/dev/null}:/run/secrets/github_credentials:ro
     healthcheck:
       test: ["CMD","node","-e","fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s

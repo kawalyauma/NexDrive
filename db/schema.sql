@@ -128,9 +128,13 @@ CREATE INDEX IF NOT EXISTS fresh_teacher_items_recent_idx ON fresh_teacher_items
 CREATE TABLE IF NOT EXISTS fresh_teacher_settings (
  workspace_id uuid PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
  mode text NOT NULL DEFAULT 'licensed_downloads'
-  CHECK(mode IN ('licensed_downloads','all_index')),
+  CHECK(mode IN ('licensed_downloads','all_downloads')),
  updated_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE fresh_teacher_settings DROP CONSTRAINT IF EXISTS fresh_teacher_settings_mode_check;
+UPDATE fresh_teacher_settings SET mode='all_downloads' WHERE mode='all_index';
+ALTER TABLE fresh_teacher_settings ADD CONSTRAINT fresh_teacher_settings_mode_check
+ CHECK(mode IN ('licensed_downloads','all_downloads'));
 CREATE INDEX IF NOT EXISTS telegram_items_job_idx ON telegram_items(job_id,created_at DESC);
 
 -- The always-on Telegram importer (telegram-service container). The web app toggles `enabled` and shows the state.
